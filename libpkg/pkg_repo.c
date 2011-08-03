@@ -1,4 +1,3 @@
-#include <err.h>
 #include <assert.h>
 #include <errno.h>
 #include <libgen.h>
@@ -147,7 +146,7 @@ pkg_repos_conf_load(struct pkg_repos *repos)
 
 		/* only name and url are needed for the repository */
                 if (count != 2) {
-                        warnx("Wrong repository format at line %d (ignoring repository)", line);
+                        EMIT_PKG_ERROR("Wrong repository format at line %d (ignoring repository)", line);
                         continue;
                 }
 
@@ -174,7 +173,7 @@ pkg_repos_conf_add(struct pkg_repos *repos, struct pkg_repos_entry *re)
         assert(repos != NULL && re != NULL);
 
         if (pkg_repos_is_reserved_name(repos, re) != EPKG_OK) {
-                warnx("Repository name '%s' is already reserved (ignoring repository at line %d)",
+                EMIT_PKG_ERROR("Repository name '%s' is already reserved (ignoring repository at line %d)",
                                 pkg_repos_get_name(re), pkg_repos_get_line(re));
 
                 sbuf_free(re->name);
