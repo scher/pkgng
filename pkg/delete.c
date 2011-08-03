@@ -7,13 +7,14 @@
 
 #include <pkg.h>
 
+#include "utils.h"
 #include "delete.h"
 
 void
 usage_delete(void)
 {
-	fprintf(stderr, "usage: pkg delete [-f] <pkg-name>\n");
-	fprintf(stderr, "       pkg delete -a\n\n");
+	fprintf(stderr, "usage: pkg delete [-yf] <pkg-name> <...>\n");
+	fprintf(stderr, "       pkg delete [-y] -a\n\n");
 	fprintf(stderr, "For more information see 'pkg help delete'.\n");
 }
 
@@ -25,19 +26,22 @@ exec_delete(int argc, char **argv)
 	struct pkgdb *db = NULL;
 	struct pkgdb_it *it = NULL;
 	match_t match = MATCH_EXACT;
-	char *origin = NULL;
-	int ch;
+	int i, ch;
 	int flags = PKG_LOAD_BASIC;
 	int force = 0;
+	int yes = 0;
 	int retcode = EPKG_OK;
 
-	while ((ch = getopt(argc, argv, "af")) != -1) {
+	while ((ch = getopt(argc, argv, "afy")) != -1) {
 		switch (ch) {
 			case 'a':
 				match = MATCH_ALL;
 				break;
 			case 'f':
 				force = 1;
+				break;
+			case 'y':
+				yes = 1;
 				break;
 			default:
 				usage_delete();
@@ -47,7 +51,7 @@ exec_delete(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 1 && match == MATCH_EXACT) {
+	if (argc < 1 && match != MATCH_ALL) {
 		usage_delete();
 		return (EX_USAGE);
 	}
@@ -57,34 +61,58 @@ exec_delete(int argc, char **argv)
 		return (EX_NOPERM);
 	}
 	
-	if ((retcode = pkgdb_open(&db, PKGDB_DEFAULT)) != EPKG_OK) {
+	if (pkgdb_open(&db, PKGDB_DEFAULT) != EPKG_OK) {
+		return (EPKG_FATAL);
+	}
+
+	if (pkg_jobs_new(&jobs, PKG_JOBS_DEINSTALL, db) != EPKG_OK) {
+		pkgdb_close(db);
+		return (EPKG_FATAL);
+	}
+
+	if (match == MATCH_ALL) {
+		if ((it = pkgdb_query(db, NULL, match)) == NULL) {
+			retcode = EPKG_FATAL;
+			goto cleanup;
+		}
+
+		while ((retcode = pkgdb_it_next(it, &pkg, flags)) == EPKG_OK) {
+			pkg_jobs_add(jobs, pkg);
+			pkg = NULL;
+		}
+	} else {
+		for (i = 0; i < argc; i++) {
+			if ((it = pkgdb_query(db, argv[i], match)) == NULL) {
+				retcode = EPKG_FATAL;
+				goto cleanup;
+			}
+
+			while ((retcode = pkgdb_it_next(it, &pkg, flags)) == EPKG_OK) {
+				pkg_jobs_add(jobs, pkg);
+				pkg = NULL;
+			}
+		}
+	}
+
+	/* check if we have something to deinstall */
+	pkg = NULL;
+	if ((retcode != EPKG_END) || (pkg_jobs(jobs, &pkg) != EPKG_OK)) {
 		goto cleanup;
 	}
 
-	if (argc == 1)
-		origin = argv[0];
+	pkg = NULL;
+	printf("The following packages will be deinstalled:\n");
+	while (pkg_jobs(jobs, &pkg) == EPKG_OK) 
+		printf("\t%s-%s\n", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
 
-	if ((retcode = pkg_jobs_new(&jobs, PKG_JOBS_DEINSTALL, db)) != EPKG_OK) {
+	if (yes == 0)
+		yes = query_yesno("\nProceed with deinstalling packages [y/N]: ");
+
+	if (yes == 1) {
+		if ((retcode = pkg_jobs_apply(jobs, force)) != EPKG_OK)
+			goto cleanup;
+	} else
 		goto cleanup;
-	}
-
-	if ((it = pkgdb_query(db, origin, match)) == NULL) {
-		retcode = EPKG_FATAL;
-		goto cleanup;
-	}
-
-	while ((retcode = pkgdb_it_next(it, &pkg, flags)) == EPKG_OK) {
-		pkg_jobs_add(jobs, pkg);
-		pkg = NULL;
-	}
-
-	if (retcode != EPKG_END) {
-		goto cleanup;
-	}
-
-	if ((retcode = pkg_jobs_apply(jobs, force)) != EPKG_OK) {
-		goto cleanup;
-	}
 
 	retcode = pkgdb_compact(db);
 
