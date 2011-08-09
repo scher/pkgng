@@ -98,11 +98,8 @@ exec_install(int argc, char **argv)
 	while (pkg_jobs(jobs, &pkg) == EPKG_OK) {
 		printf("\t%s-%s", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
 		
-		if (multi_repos == 1) {
-			re = NULL;
-			pkg_repos_next(pkg, &re);
-			printf(" [ from repository %s ]", pkg_repos_get_name(re));
-		}
+		if (multi_repos == 1)
+			printf(" [ from repository %s ]", pkg_get(pkg, PKG_REPONAME));
 
 		printf("\n");
 	}
