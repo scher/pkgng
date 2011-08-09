@@ -27,7 +27,6 @@ exec_install(int argc, char **argv)
 	struct pkgdb_it *it;
 	struct pkgdb *db = NULL;
 	struct pkg_jobs *jobs = NULL;
-	struct pkg_repos_entry *re = NULL;
 	int retcode = EPKG_OK;
 	int multi_repos = 0;
 	int i, ch, yes = 0;

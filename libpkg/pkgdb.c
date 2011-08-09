@@ -841,9 +841,9 @@ pkgdb_query_remote(struct pkgdb *db, const char *pattern)
 			"arch, osversion, maintainer, www, pkgsize, "
 			"flatsize AS newflatsize, cksum, path AS repopath ";
 	const char *multireposql = ""
-		"SELECT id AS rowid, origin, name, version, comment, desc, "
+		"SELECT id, origin, name, version, comment, desc, "
 			"arch, osversion, maintainer, www, pkgsize, "
-			"flatsize AS newflatsize, cksum, path, '%s' AS dbname "
+			"flatsize, cksum, path, '%s' AS dbname "
 		"FROM '%s'.packages "
 		"WHERE origin = ?1 ";
 	const char *sql_deps = ""
