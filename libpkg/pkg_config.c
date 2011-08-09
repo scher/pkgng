@@ -21,6 +21,7 @@ static struct _config {
 	{ "PKG_CACHEDIR", "/var/cache/pkg", NULL},
 	{ "PKG_MULTIREPOS", "false", NULL },
 	{ "PORTSDIR", "/usr/ports", NULL },
+	{ "PUBKEY", "/etc/ssl/pkg.pub", NULL },
 	{ NULL, NULL, NULL}
 };
 

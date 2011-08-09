@@ -18,8 +18,8 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 	int nbel, i;
 	size_t next;
 	size_t len;
-	char sha256[65];
-	char path[MAXPATHLEN];
+	char sha256[SHA256_DIGEST_LENGTH * 2 + 1];
+	char path[MAXPATHLEN + 1];
 	char *last_plist_file = NULL;
 	char *cmd = NULL;
 	const char *prefix = NULL;
@@ -146,7 +146,7 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 					len--;
 				}
 
-				snprintf(path, MAXPATHLEN, "%s%s%s/", prefix, slash, buf);
+				snprintf(path, sizeof(path), "%s%s%s/", prefix, slash, buf);
 
 				if (sbuf_len(unexec_scripts) == 0)
 					sbuf_cat(unexec_scripts, "#@unexec\n"); /* to be able to regenerate the @unexec in pkg2legacy */
@@ -172,7 +172,7 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 				len--;
 			}
 
-			snprintf(path, MAXPATHLEN, "%s%s%s", prefix, slash, buf);
+			snprintf(path, sizeof(path), "%s%s%s", prefix, slash, buf);
 
 			if (lstat(path, &st) == 0) {
 				if (S_ISLNK(st.st_mode)) {

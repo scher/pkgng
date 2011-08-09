@@ -20,26 +20,26 @@ static int pkg_create_from_dir(struct pkg *, const char *, struct packing *);
 static int
 pkg_create_from_dir(struct pkg *pkg, const char *root, struct packing *pkg_archive)
 {
-	char fpath[MAXPATHLEN];
+	char fpath[MAXPATHLEN + 1];
 	struct pkg_file *file = NULL;
 	struct pkg_dir *dir = NULL;
 	char *m;
 	const char *mtree;
 	struct stat st;
-	char sha256[65];
+	char sha256[SHA256_DIGEST_LENGTH * 2 + 1];
 
 	/*
 	 * if the checksum is not provided in the manifest recompute it
 	 */
 	while (pkg_files(pkg, &file) == EPKG_OK) {
 		if (root != NULL)
-			snprintf(fpath, MAXPATHLEN, "%s%s", root, pkg_file_path(file));
+			snprintf(fpath, sizeof(fpath), "%s%s", root, pkg_file_path(file));
 		else
-			strlcpy(fpath, pkg_file_path(file), MAXPATHLEN);
+			strlcpy(fpath, pkg_file_path(file), sizeof(fpath));
 
 		if ((pkg_file_sha256(file) == NULL || pkg_file_sha256(file)[0] == '\0') && lstat(fpath, &st) == 0 && !S_ISLNK(st.st_mode)) {
 			sha256_file(fpath, sha256);
-			strlcpy(file->sha256, sha256, 65);
+			strlcpy(file->sha256, sha256, sizeof(file->sha256));
 		}
 
 	}
@@ -54,18 +54,18 @@ pkg_create_from_dir(struct pkg *pkg, const char *root, struct packing *pkg_archi
 
 	while (pkg_files(pkg, &file) == EPKG_OK) {
 		if (root != NULL)
-			snprintf(fpath, MAXPATHLEN, "%s%s", root, pkg_file_path(file));
+			snprintf(fpath, sizeof(fpath), "%s%s", root, pkg_file_path(file));
 		else
-			strlcpy(fpath, pkg_file_path(file), MAXPATHLEN);
+			strlcpy(fpath, pkg_file_path(file), sizeof(fpath));
 
 		packing_append_file_attr(pkg_archive, fpath, pkg_file_path(file), file->uname, file->gname, file->perm);
 	}
 
 	while (pkg_dirs(pkg, &dir) == EPKG_OK) {
 		if (root != NULL)
-			snprintf(fpath, MAXPATHLEN, "%s%s", root, pkg_dir_path(dir));
+			snprintf(fpath, sizeof(fpath), "%s%s", root, pkg_dir_path(dir));
 		else
-			strlcpy(fpath, pkg_dir_path(dir), MAXPATHLEN);
+			strlcpy(fpath, pkg_dir_path(dir), sizeof(fpath));
 
 		packing_append_file_attr(pkg_archive, fpath, pkg_dir_path(dir), dir->uname, dir->gname, dir->perm);
 	}
@@ -82,22 +82,22 @@ pkg_create_archive(const char *outdir, struct pkg *pkg, pkg_formats format, int 
 	/*
 	 * Ensure that we have all the information we need
 	 */
-	if ((pkg->flags & required_flags) != required_flags) {
-		printf("error: required flags not set\n");
+	assert((pkg->flags & required_flags) == required_flags);
+
+	if (mkdirs(outdir) != EPKG_OK)
 		return NULL;
-	}
 
 	if (asprintf(&pkg_path, "%s/%s-%s", outdir, pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION)) == -1) {
-		perror("asprintf");
-		return NULL; /* XXX do better */
+		EMIT_ERRNO("asprintf", "");
+		return (NULL);
 	}
-	if (packing_init(&pkg_archive, pkg_path, format) != EPKG_OK) {
-		perror("packing_init");
-		return NULL;
-	}
+
+	if (packing_init(&pkg_archive, pkg_path, format) != EPKG_OK)
+		pkg_archive = NULL;
 
 	if (pkg_path != NULL)
 		free(pkg_path);
+
 	return pkg_archive;
 }
 

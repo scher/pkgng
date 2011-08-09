@@ -22,7 +22,7 @@ exec_search(int argc, char **argv)
 	char *pattern;
 	match_t match = MATCH_EXACT;
 	int  retcode = EPKG_OK;
-	unsigned int field = REPO_SEARCH_NAME;
+	pkgdb_field field = FIELD_NAME;
 	int ch;
 	int multi_repos = 0;
 	char size[7];
@@ -43,10 +43,10 @@ exec_search(int argc, char **argv)
 				match = MATCH_EREGEX;
 				break;
 			case 'c':
-				field |= REPO_SEARCH_COMMENT;
+				field = FIELD_COMMENT;
 				break;
 			case 'd':
-				field |= REPO_SEARCH_DESCRIPTION;
+				field = FIELD_DESC;
 				break;
 			default:
 				usage_search();

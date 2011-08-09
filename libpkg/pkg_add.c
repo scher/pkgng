@@ -6,7 +6,6 @@
 #include <libgen.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fnmatch.h>
 #include <errno.h>
 
 #include "pkg.h"
@@ -38,7 +37,7 @@ do_extract(struct archive *a, struct archive_entry *ae)
 {
 	int retcode = EPKG_OK;
 	int ret = 0;
-	char path[MAXPATHLEN];
+	char path[MAXPATHLEN + 1];
 	struct stat st;
 
 	do {
@@ -81,11 +80,11 @@ do_extract(struct archive *a, struct archive_entry *ae)
 int
 pkg_add(struct pkgdb *db, const char *path)
 {
-	return (pkg_add2(db, path, 0));
+	return (pkg_add2(db, path, 0, 0));
 }
 
 int
-pkg_add2(struct pkgdb *db, const char *path, int upgrade)
+pkg_add2(struct pkgdb *db, const char *path, int upgrade, int automatic)
 {
 	struct archive *a;
 	struct archive_entry *ae;
@@ -95,7 +94,7 @@ pkg_add2(struct pkgdb *db, const char *path, int upgrade)
 	struct pkg_dep *dep = NULL;
 	struct utsname u;
 	bool extract = true;
-	char dpath[MAXPATHLEN];
+	char dpath[MAXPATHLEN + 1];
 	const char *basedir;
 	const char *ext;
 	int retcode = EPKG_OK;
@@ -115,6 +114,9 @@ pkg_add2(struct pkgdb *db, const char *path, int upgrade)
 		retcode = ret;
 		goto cleanup;
 	}
+
+	if (automatic == 1)
+		pkg_setautomatic(pkg);
 
 	if (uname(&u) != 0) {
 		EMIT_ERRNO("uname", "");
@@ -175,7 +177,7 @@ pkg_add2(struct pkgdb *db, const char *path, int upgrade)
 					 ext);
 
 			if (access(dpath, F_OK) == 0) {
-				if (pkg_add(db, dpath) != EPKG_OK) {
+				if (pkg_add2(db, dpath, 0, 1) != EPKG_OK) {
 					retcode = EPKG_FATAL;
 					goto cleanup;
 				}

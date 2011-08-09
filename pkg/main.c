@@ -15,6 +15,7 @@
 #include "add.h"
 #include "autoremove.h"
 #include "backup.h"
+#include "clean.h"
 #include "create.h"
 #include "delete.h"
 #include "event.h"
@@ -24,6 +25,7 @@
 #include "repo.h"
 #include "search.h"
 #include "update.h"
+#include "updating.h"
 #include "upgrade.h"
 #include "version.h"
 #include "which.h"
@@ -40,6 +42,7 @@ static struct commands {
 	{ "add", exec_add, usage_add},
 	{ "autoremove", exec_autoremove, usage_autoremove},
 	{ "backup", exec_backup, usage_backup},
+	{ "clean", exec_clean, usage_clean},
 	{ "create", exec_create, usage_create},
 	{ "delete", exec_delete, usage_delete},
 	{ "help", exec_help, usage_help},
@@ -49,6 +52,7 @@ static struct commands {
 	{ "register", exec_register, usage_register},
 	{ "repo", exec_repo, usage_repo},
 	{ "update", exec_update, usage_update},
+	{ "updating", exec_updating, usage_updating},
 	{ "upgrade", exec_upgrade, usage_upgrade},
 	{ "version", exec_version, usage_version},
 	{ "which", exec_which, usage_which},
@@ -129,7 +133,7 @@ main(int argc, char **argv)
 	if (argc < 2)
 		usage();
 
-	pkg_event_register(&event_callback, NULL);
+	pkg_event_register(&event_callback, &debug);
 
 	while ((ch = getopt(argc, argv, "dj:c:")) != -1) {
 		switch(ch) {

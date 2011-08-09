@@ -2,13 +2,13 @@
 #include <sys/types.h>
 
 #include <err.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sysexits.h>
-#include <unistd.h>
-#include <string.h>
 #include <fcntl.h>
 #include <libutil.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sysexits.h>
+#include <unistd.h>
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -29,9 +29,15 @@ update_from_remote_repo(const char *name, const char *url)
 	struct archive *a = NULL;
 	struct archive_entry *ae = NULL;
 	char repofile[MAXPATHLEN];
+	char repofile_unchecked[MAXPATHLEN];
 	char *tmp = NULL;
+	const char *dbdir = NULL;
+	int retcode = EPKG_OK;
+	unsigned char *sig = NULL;
+	int siglen = 0;
 
-	tmp = mktemp(strdup("/tmp/repo.txz.XXXXXX"));
+	tmp   = mktemp(strdup("/tmp/repo.txz.XXXXXX"));
+	dbdir = pkg_config("PKG_DBDIR");
 
 	if (pkg_fetch_file(url, tmp) != EPKG_OK) {
 		unlink(tmp);
@@ -47,15 +53,30 @@ update_from_remote_repo(const char *name, const char *url)
 
 	while (archive_read_next_header(a, &ae) == ARCHIVE_OK) {
 		if (strcmp(archive_entry_pathname(ae), "repo.sqlite") == 0) {
-			snprintf(repofile, MAXPATHLEN, "%s/%s.sqlite",
-				       pkg_config("PKG_DBDIR"), name);
-			archive_entry_set_pathname(ae, repofile);
+			snprintf(repofile, sizeof(repofile), "%s/%s.sqlite", dbdir, name);
+			snprintf(repofile_unchecked, sizeof(repofile_unchecked), "%s.unchecked", repofile);
+			archive_entry_set_pathname(ae, repofile_unchecked);
 			archive_read_extract(a, ae, EXTRACT_ARCHIVE_FLAGS);
-			break;
+		}
+		if (strcmp(archive_entry_pathname(ae), "signature") == 0) {
+			siglen = archive_entry_size(ae);
+			sig = malloc(siglen);
+			archive_read_data(a, sig, siglen);
 		}
 	}
 
-	if ( a != NULL) 
+	if (sig != NULL) {
+		if (pkg_repo_verify(repofile_unchecked, sig, siglen - 1) != EPKG_OK) {
+			warnx("Invalid signature, removing repository.\n");
+			unlink(repofile_unchecked);
+			free(sig);
+			return (EPKG_FATAL);
+		}
+	}
+
+	rename(repofile_unchecked, repofile);
+
+	if (a != NULL)
 		archive_read_finish(a);
 
 	unlink(tmp);
@@ -63,6 +84,7 @@ update_from_remote_repo(const char *name, const char *url)
 
 	return (EPKG_OK);
 }
+
 void
 usage_update(void)
 {

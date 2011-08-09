@@ -76,7 +76,7 @@ pkg_jobs_install(struct pkg_jobs *j)
 {
 	struct pkg *p = NULL;
 	const char *cachedir;
-	char path[MAXPATHLEN];
+	char path[MAXPATHLEN + 1];
 
 	/* Fetch */
 	while (pkg_jobs(j, &p) == EPKG_OK) {
@@ -91,7 +91,7 @@ pkg_jobs_install(struct pkg_jobs *j)
 		snprintf(path, sizeof(path), "%s/%s", cachedir,
 				 pkg_get(p, PKG_REPOPATH));
 
-		if (pkg_add(j->db, path) != EPKG_OK) {
+		if (pkg_add2(j->db, path, 0, pkg_isautomatic(p)) != EPKG_OK) {
 			return (EPKG_FATAL);
 		}
 	}
@@ -106,7 +106,7 @@ pkg_jobs_upgrade(struct pkg_jobs *j)
 	struct pkg *oldpkg = NULL;
 	struct pkgdb_it *it;
 	const char *cachedir;
-	char path[MAXPATHLEN];
+	char path[MAXPATHLEN + 1];
 	int retcode;
 
 	/* Fetch */
@@ -118,13 +118,16 @@ pkg_jobs_upgrade(struct pkg_jobs *j)
 	cachedir = pkg_config("PKG_CACHEDIR");
 	p = NULL;
 	while (pkg_jobs(j, &p) == EPKG_OK) {
-		/* get the installed pkg */
+		/* get the installed pkg if any */
 		it = pkgdb_query(j->db, pkg_get(p, PKG_ORIGIN), MATCH_EXACT);
-		pkgdb_it_next(it, &oldpkg, PKG_LOAD_BASIC);
-		snprintf(path, sizeof(path), "%s/%s", cachedir,
-				pkg_get(p, PKG_REPOPATH));
+		if (pkgdb_it_next(it, &oldpkg, PKG_LOAD_BASIC) == EPKG_OK) {
+			snprintf(path, sizeof(path), "%s/%s", cachedir,
+					pkg_get(p, PKG_REPOPATH));
+			retcode = pkg_upgrade(j->db, oldpkg, path);
+		} else {
+			retcode = pkg_upgrade(j->db, NULL, path);
+		}
 
-		retcode = pkg_upgrade(j->db, oldpkg, path);
 		if (retcode != EPKG_OK)
 			return (retcode);
 	}
@@ -212,8 +215,10 @@ add_dep(struct pkg_jobs *j, struct pkg_jobs_node *n)
 			ndep->pkg = pkgdb_query_remote(j->db, pkg_dep_origin(dep));
 			if (ndep->pkg == NULL)
 				EMIT_MISSING_DEP(n->pkg, dep);
-			else
+			else {
+				pkg_setautomatic(ndep->pkg);
 				add_dep(j, ndep);
+			}
 		}
 		add_parent(ndep, n);
 	}

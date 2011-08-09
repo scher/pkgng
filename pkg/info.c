@@ -3,12 +3,12 @@
 #include <err.h>
 #include <inttypes.h>
 #include <libutil.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdbool.h>
 #include <pkg.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include <sysexits.h>
+#include <unistd.h>
 
 #include "info.h"
 
@@ -25,9 +25,35 @@ print_info(struct pkg * const pkg, unsigned int opt)
 {
 	struct pkg_dep *dep = NULL;
 	struct pkg_file *file = NULL;
+	struct pkg_category *cat = NULL;
+	struct pkg_license *lic = NULL;
 	char size[7];
 
-	if (opt & INFO_PRINT_DEP) {
+	if (opt & INFO_FULL) {
+		printf("Name: %s\n", pkg_get(pkg, PKG_NAME));
+		printf("Version: %s\n", pkg_get(pkg, PKG_VERSION));
+		printf("Origin: %s\n", pkg_get(pkg, PKG_ORIGIN));
+		printf("Categories:");
+		while (pkg_categories(pkg, &cat) == EPKG_OK)
+			printf(" %s", pkg_category_name(cat));
+		printf("\n");
+		printf("Licenses: ");
+		while (pkg_licenses(pkg, &lic) == EPKG_OK) {
+			printf(" %s", pkg_license_name(lic));
+			if (pkg_licenselogic(pkg) != 1)
+				printf(" %c", pkg_licenselogic(pkg));
+			else
+				printf(" ");
+		}
+		printf("\b \n");
+		printf("Maintainer: %s\n", pkg_get(pkg, PKG_MAINTAINER));
+		printf("WWW: %s\n", pkg_get(pkg, PKG_WWW));
+		printf("Comment: %s\n", pkg_get(pkg, PKG_COMMENT));
+		humanize_number(size, sizeof(size), pkg_flatsize(pkg), "B", HN_AUTOSCALE, 0);
+		printf("Flat size: %s\n", size);
+		printf("Description:\n %s\n", pkg_get(pkg, PKG_DESC));
+		printf("\n");
+	} else if (opt & INFO_PRINT_DEP) {
 		if (!(opt & INFO_QUIET))
 			printf("%s-%s depends on:\n", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
 
@@ -83,8 +109,8 @@ print_info(struct pkg * const pkg, unsigned int opt)
 void
 usage_info(void)
 {
-	fprintf(stderr, "usage: pkg info\n");
-	fprintf(stderr, "       pkg info [-aegxXdrlsqO] <pkg-name>\n\n");
+	fprintf(stderr, "usage: pkg info -a\n");
+	fprintf(stderr, "       pkg info [-egxXdrlsqOf] <pkg-name>\n\n");
 	fprintf(stderr, "For more information see 'pkg help info'.\n");
 }
 
@@ -154,6 +180,10 @@ exec_info(int argc, char **argv)
 				break;
 			case 'p':
 				opt |= INFO_PREFIX;
+				break;
+			case 'f':
+				opt |= INFO_FULL;
+				query_flags |= PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES;
 				break;
 			default:
 				usage_info();

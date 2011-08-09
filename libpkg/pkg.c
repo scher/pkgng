@@ -60,6 +60,8 @@ pkg_new(struct pkg **pkg, pkg_t type)
 	STAILQ_INIT(&(*pkg)->scripts);
 	STAILQ_INIT(&(*pkg)->options);
 	STAILQ_INIT(&(*pkg)->repos);
+	STAILQ_INIT(&(*pkg)->users);
+	STAILQ_INIT(&(*pkg)->groups);
 
 	(*pkg)->automatic = false;
 	(*pkg)->type = type;
@@ -93,6 +95,8 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 	pkg_freeconflicts(pkg);
 	pkg_freescripts(pkg);
 	pkg_freeoptions(pkg);
+	pkg_freeusers(pkg);
+	pkg_freegroups(pkg);
 
 	pkg->type = type;
 }
@@ -116,6 +120,8 @@ pkg_free(struct pkg *pkg)
 	pkg_freescripts(pkg);
 	pkg_freeoptions(pkg);
 	pkg_freerepos(pkg);
+	pkg_freeusers(pkg);
+	pkg_freegroups(pkg);
 
 	free(pkg);
 }
@@ -166,6 +172,11 @@ pkg_set(struct pkg * pkg, pkg_attr attr, const char *value)
 	}
 
 	return (sbuf_set(sbuf, value));
+}
+
+int
+pkg_setmtree(struct pkg *pkg, const char *mtree) {
+	return (pkg_set(pkg, PKG_MTREE, mtree));
 }
 
 int
@@ -263,8 +274,9 @@ pkg_setnewpkgsize(struct pkg *pkg, int64_t size)
 }
 
 int
-pkg_set_licenselogic(struct pkg *pkg, lic_t logic)
+pkg_set_licenselogic(struct pkg *pkg, int64_t logic)
 {
+	assert(pkg != NULL);
 	pkg->licenselogic = logic;
 	return (EPKG_OK);
 }
@@ -278,6 +290,13 @@ pkg_licenselogic(struct pkg *pkg)
 }
 
 int
+pkg_setrowid(struct pkg *pkg, int64_t rowid) {
+	assert(pkg != NULL);
+	pkg->rowid = rowid;
+	return (EPKG_OK);
+}
+
+int
 pkg_licenses(struct pkg *pkg, struct pkg_license **l)
 {
 	assert(pkg != NULL);
@@ -288,6 +307,38 @@ pkg_licenses(struct pkg *pkg, struct pkg_license **l)
 		*l = STAILQ_NEXT(*l, next);
 
 	if (*l == NULL)
+		return (EPKG_END);
+	else
+		return (EPKG_OK);
+}
+
+int
+pkg_users(struct pkg *pkg, struct pkg_user **u)
+{
+	assert(pkg != NULL);
+
+	if (*u == NULL)
+		*u = STAILQ_FIRST(&pkg->users);
+	else
+		*u = STAILQ_NEXT(*u, next);
+
+	if (*u == NULL)
+		return (EPKG_END);
+	else
+		return (EPKG_OK);
+}
+
+int
+pkg_groups(struct pkg *pkg, struct pkg_group **g)
+{
+	assert(pkg != NULL);
+
+	if (*g == NULL)
+		*g = STAILQ_FIRST(&pkg->groups);
+	else
+		*g = STAILQ_NEXT(*g, next);
+
+	if (*g == NULL)
 		return (EPKG_END);
 	else
 		return (EPKG_OK);
@@ -439,6 +490,36 @@ pkg_addlicense(struct pkg *pkg, const char *name)
 	sbuf_set(&l->name, name);
 
 	STAILQ_INSERT_TAIL(&pkg->licenses, l, next);
+
+	return (EPKG_OK);
+}
+
+int
+pkg_adduser(struct pkg *pkg, const char *name)
+{
+	struct pkg_user *u;
+
+	assert(pkg != NULL);
+	assert(name != NULL && name[0] != '\0');
+
+	pkg_user_new(&u);
+
+	strlcpy(u->name, name, sizeof(u->name));
+
+	return (EPKG_OK);
+}
+
+int
+pkg_addgroup(struct pkg *pkg, const char *name)
+{
+	struct pkg_group *g;
+
+	assert(pkg != NULL);
+	assert(name != NULL && name[0] != '\0');
+
+	pkg_group_new(&g);
+
+	strlcpy(g->name, name, sizeof(g->name));
 
 	return (EPKG_OK);
 }
@@ -774,6 +855,34 @@ pkg_freelicenses(struct pkg *pkg)
 }
 
 void
+pkg_freeusers(struct pkg *pkg)
+{
+	struct pkg_user *u;
+
+	while (!STAILQ_EMPTY(&pkg->users)) {
+		u = STAILQ_FIRST(&pkg->users);
+		STAILQ_REMOVE_HEAD(&pkg->users, next);
+		pkg_user_free(u);
+	}
+
+	pkg->flags &= ~PKG_LOAD_USERS;
+}
+
+void
+pkg_freegroups(struct pkg *pkg)
+{
+	struct pkg_group *g;
+
+	while (!STAILQ_EMPTY(&pkg->groups)) {
+		g = STAILQ_FIRST(&pkg->groups);
+		STAILQ_REMOVE_HEAD(&pkg->groups, next);
+		pkg_group_free(g);
+	}
+
+	pkg->flags &= ~PKG_LOAD_GROUPS;
+}
+
+void
 pkg_freecategories(struct pkg *pkg)
 {
 	struct pkg_category *c;
@@ -923,7 +1032,6 @@ pkg_open2(struct pkg **pkg_p, struct archive **a, struct archive_entry **ae, con
 
 	while ((ret = archive_read_next_header(*a, ae)) == ARCHIVE_OK) {
 		fpath = archive_entry_pathname(*ae);
-
 		if (fpath[0] != '+')
 			break;
 
@@ -979,8 +1087,8 @@ pkg_copy_tree(struct pkg *pkg, const char *src, const char *dest)
 {
 	struct packing *pack;
 	struct pkg_file *file = NULL;
-	char spath[MAXPATHLEN];
-	char dpath[MAXPATHLEN];
+	char spath[MAXPATHLEN + 1];
+	char dpath[MAXPATHLEN + 1];
 
 	if (packing_init(&pack, dest, 0) != EPKG_OK) {
 		/* TODO */
@@ -988,8 +1096,8 @@ pkg_copy_tree(struct pkg *pkg, const char *src, const char *dest)
 	}
 
 	while (pkg_files(pkg, &file) == EPKG_OK) {
-		snprintf(spath, MAXPATHLEN, "%s%s", src, pkg_file_path(file));
-		snprintf(dpath, MAXPATHLEN, "%s%s", dest, pkg_file_path(file));
+		snprintf(spath, sizeof(spath), "%s%s", src, pkg_file_path(file));
+		snprintf(dpath, sizeof(dpath), "%s%s", dest, pkg_file_path(file));
 		printf("%s -> %s\n", spath, dpath);
 		packing_append_file(pack, spath, dpath);
 	}

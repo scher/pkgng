@@ -14,6 +14,8 @@ struct pkg_conflict;
 struct pkg_script;
 struct pkg_option;
 struct pkg_license;
+struct pkg_user;
+struct pkg_group;
 
 struct pkgdb;
 struct pkgdb_it;
@@ -44,7 +46,7 @@ typedef enum {
 } pkgdb_t;
 
 /**
- * Specify how an argument should be used by matching functions.
+ * Specify how an argument should be used by query functions.
  */
 typedef enum {
 	/**
@@ -69,6 +71,18 @@ typedef enum {
 	MATCH_EREGEX
 } match_t;
 
+/**
+ * Specify on which field the pattern will be matched uppon.
+ */
+
+typedef enum {
+	FIELD_NONE,
+	FIELD_ORIGIN,
+	FIELD_NAME,
+	FIELD_NAMEVER,
+	FIELD_COMMENT,
+	FIELD_DESC
+} pkgdb_field;
 
 /**
  * The type of package.
@@ -267,6 +281,20 @@ int pkg_categories(struct pkg *pkg, struct pkg_category **category);
 int pkg_licenses(struct pkg *pkg, struct pkg_license **license);
 
 /**
+ * Iterates over the users of the package.
+ * @param Must be set to NULL for the first call.
+ * @return An error code.
+ */
+int pkg_users(struct pkg *pkg, struct pkg_user **user);
+
+/**
+ * Iterates over the groups of the package.
+ * @param Must be set to NULL for the first call.
+ * @return An error code.
+ */
+int pkg_groups(struct pkg *pkg, struct pkg_group **group);
+
+/**
  * Iterates over the conflicts of the package.
  * @param conflict Must be set to NULL for the first call.
  * @return An error code.
@@ -296,6 +324,7 @@ int pkg_analyse_files(struct pkgdb *, struct pkg *);
  * Generic setter for simple attributes.
  */
 int pkg_set(struct pkg *pkg, pkg_attr attr, const char *value);
+int pkg_setmtree(struct pkg *pkg, const char *value);
 
 /**
  * Read the content of a file into a buffer, then call pkg_set().
@@ -308,7 +337,7 @@ int pkg_isautomatic(struct pkg *pkg);
 /**
  * set the logic for license combinaison
  */
-int pkg_set_licenselogic(struct pkg *pkg, lic_t licenselogic);
+int pkg_set_licenselogic(struct pkg *pkg, int64_t licenselogic);
 
 /**
  * get the logic for license combinaison
@@ -389,6 +418,18 @@ int pkg_addcategory(struct pkg *pkg, const char *name);
 int pkg_addlicense(struct pkg *pkg, const char *name);
 
 /**
+ * Add a user
+ * @return An error code.
+ */
+int pkg_adduser(struct pkg *pkg, const char *name);
+
+/**
+ * Add a group
+ * @return An error code.
+ */
+int pkg_addgroup(struct pkg *pkg, const char *group);
+
+/**
  * Allocate a new struct pkg_conflict and add it to the conflicts of pkg.
  * @return An error code.
  */
@@ -445,6 +486,9 @@ const char *pkg_category_name(struct pkg_category *);
 
 const char *pkg_license_name(struct pkg_license *);
 
+const char *pkg_user_name(struct pkg_user *);
+const char *pkg_group_name(struct pkg_group *);
+
 /* pkg_conflict */
 const char * pkg_conflict_glob(struct pkg_conflict *);
 
@@ -484,6 +528,7 @@ void pkgdb_close(struct pkgdb *db);
  */
 
 int pkgdb_dump(struct pkgdb *db, char *dest);
+int pkgdb_load(struct pkgdb *db, char *dest);
 
 /**
  * Whether a package database instance has a particular flag.
@@ -551,11 +596,8 @@ struct pkgdb_it * pkgdb_query_which(struct pkgdb *db, const char *path);
 #define PKG_LOAD_DIRS (1<<8)
 #define PKG_LOAD_CATEGORIES (1<<9)
 #define PKG_LOAD_LICENSES (1<<10)
-
-#define REPO_SEARCH_NAME 0
-#define REPO_SEARCH_COMMENT (1<<0)
-#define REPO_SEARCH_DESCRIPTION (1<<1)
-
+#define PKG_LOAD_USERS (1<<11)
+#define PKG_LOAD_GROUPS (1<<12)
 
 /**
  * Get the next pkg.
@@ -581,6 +623,8 @@ int pkgdb_loadoptions(struct pkgdb *db, struct pkg *pkg);
 int pkgdb_loadmtree(struct pkgdb *db, struct pkg *pkg);
 int pkgdb_loadcategory(struct pkgdb *db, struct pkg *pkg);
 int pkgdb_loadlicense(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_loaduser(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_loadgroup(struct pkgdb *db, struct pkg *pkg);
 
 /**
  * Compact the database to save space.
@@ -597,7 +641,7 @@ int pkgdb_compact(struct pkgdb *db);
  * @return An error code.
  */
 int pkg_add(struct pkgdb *db, const char *path);
-int pkg_add2(struct pkgdb *db, const char *path, int upgrade);
+int pkg_add2(struct pkgdb *db, const char *path, int upgrade, int automatic);
 
 /**
  * Allocate a new pkg_jobs.
@@ -659,6 +703,7 @@ int pkg_delete2(struct pkg *pkg, struct pkgdb *db, int force, int upgrade);
 int pkg_upgrade(struct pkgdb *db, struct pkg *pkg, const char *path);
 
 int pkg_repo_fetch(struct pkg *pkg);
+int pkg_repo_verify(const char *path, unsigned char *sig, unsigned int sig_len);
 
 /**
  * Get the value of a configuration key

@@ -47,7 +47,8 @@ fake-pkg:
 	@${ECHO_CMD} "www: ${WWW}" >> ${MANIFESTF}
 .endif
 	@${ECHO_CMD} "deps: " >> ${MANIFESTF}
-	@${MAKE} -C ${.CURDIR} actual-package-depends | ${GREP} -v -E ${PKG_IGNORE_DEPENDS} | ${SORT} -u | ${AWK} '{ print "  "$$1": { origin: "$$2", version: "$$3"}" }' >> ${MANIFESTF}
+
+	@${MAKE} -C ${.CURDIR} actual-package-depends | ${GREP} -v -E ${PKG_IGNORE_DEPENDS} | ${SORT} -u | ${AWK} '{ print "  "$$1": { origin: "$$2", version: \""$$3"\"}" }' >> ${MANIFESTF}
 	@${ECHO_CMD} -n "categories: [" >> ${MANIFESTF}
 .for cat in ${CATEGORIES:u}
 	@${ECHO_CMD} -n "${cat}," >> ${MANIFESTF}
@@ -73,6 +74,16 @@ fake-pkg:
 .endfor
 	@${ECHO_CMD} "]" >> ${MANIFESTF}
 .endif
+	@${ECHO_CMD} -n "users: [" >> ${MANIFESTF}
+.for user in ${USERS:u}
+	@${ECHO_CMD} -n "${user}, " >> ${MANIFESTF}
+.endfor
+	@${ECHO_CMD} "]"
+	@${ECHO_CMD} -n "groups: [" >> ${MANIFESTF}
+.for group in ${GROUPS:u}
+	@${ECHO_CMD} -n "${group}, " >> ${MANIFESTF}
+.endfor
+	@${ECHO_CMD} "]"
 	@[ -f ${PKGINSTALL} ] && ${CP} ${PKGINSTALL} ${METADIR}/+INSTALL; \
 	[ -f ${PKGPREINSTALL} ] && ${CP} ${PKGPREINSTALL} ${METADIR}/+PRE_INSTALL; \
 	[ -f ${PKGPOSTINSTALL} ] && ${CP} ${PKGPOSTINSTALL} ${METADIR}/+POST_INSTALL; \
@@ -84,8 +95,8 @@ fake-pkg:
 	[ -f ${PKGPOSTUPGRADE} ] && ${CP} ${PKGPOSTUPGRADE} ${METADIR}/+POST_UPGRADE; \
 	${CP} ${DESCR} ${METADIR}/+DESC; \
 	[ -f ${PKGMESSAGE} ] && ${CP} ${PKGMESSAGE} ${METADIR}/+DISPLAY || return 0
-.if !defined(NO_MTREE) && defined(MTREE_FILE)
-	@${CP} ${MTREE_FILE} ${METADIR}/+MTREE_DIRS
+.if !defined(NO_MTREE)
+	@[ -f ${MTREE_FILE} ] && ${CP} ${MTREE_FILE} ${METADIR}/+MTREE_DIRS || return 0
 .endif
 .if defined(INSTALLS_DEPENDS)
 	@${PKG_CMD} -d -l -m ${METADIR} -f ${TMPPLIST}

@@ -10,8 +10,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#include <openssl/sha.h>
-
 #include "pkg.h"
 #include "pkg_event.h"
 #include "pkg_util.h"
@@ -58,7 +56,7 @@ sbuf_free(struct sbuf *buf)
 int
 mkdirs(const char *_path)
 {
-	char path[MAXPATHLEN];
+	char path[MAXPATHLEN + 1];
 	char *p;
 
 	strlcpy(path, _path, sizeof(path));
@@ -143,7 +141,7 @@ int
 format_exec_cmd(char **dest, const char *in, const char *prefix, const char *plist_file)
 {
 	struct sbuf *buf = sbuf_new_auto();
-	char path[MAXPATHLEN];
+	char path[MAXPATHLEN + 1];
 	char *cp;
 
 	while (in[0] != '\0') {
@@ -158,18 +156,18 @@ format_exec_cmd(char **dest, const char *in, const char *prefix, const char *pli
 					break;
 				case 'f':
 					if (prefix[strlen(prefix) - 1] == '/')
-						snprintf(path, MAXPATHLEN, "%s%s", prefix, plist_file);
+						snprintf(path, sizeof(path), "%s%s", prefix, plist_file);
 					else
-						snprintf(path, MAXPATHLEN, "%s/%s", prefix, plist_file);
+						snprintf(path, sizeof(path), "%s/%s", prefix, plist_file);
 					cp = strrchr(path, '/');
 					cp ++;
 					sbuf_cat(buf, cp);
 					break;
 				case 'B':
 					if (prefix[strlen(prefix) - 1] == '/')
-						snprintf(path, MAXPATHLEN, "%s%s", prefix, plist_file);
+						snprintf(path, sizeof(path), "%s%s", prefix, plist_file);
 					else
-						snprintf(path, MAXPATHLEN, "%s/%s", prefix, plist_file);
+						snprintf(path, sizeof(path), "%s/%s", prefix, plist_file);
 					cp = strrchr(path, '/');
 					cp[0] = '\0';
 					sbuf_cat(buf, path);
@@ -219,17 +217,17 @@ is_dir(const char *path)
 }
 
 static void
-sha256_hash(unsigned char hash[SHA256_DIGEST_LENGTH], char out[65])
+sha256_hash(unsigned char hash[SHA256_DIGEST_LENGTH], char out[SHA256_DIGEST_LENGTH * 2 + 1])
 {
 	int i;
 	for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
 		sprintf(out + (i * 2), "%02x", hash[i]);
 
-	out[64] = '\0';
+	out[sizeof(out) -1] = '\0';
 }
 
 void
-sha256_str(const char *string, char out[65])
+sha256_str(const char *string, char out[SHA256_DIGEST_LENGTH * 2 + 1])
 {
 	unsigned char hash[SHA256_DIGEST_LENGTH];
 	SHA256_CTX sha256;
@@ -242,7 +240,7 @@ sha256_str(const char *string, char out[65])
 }
 
 int
-sha256_file(const char *path, char out[65])
+sha256_file(const char *path, char out[SHA256_DIGEST_LENGTH * 2 + 1])
 {
 	FILE *fp;
 	char buffer[BUFSIZ];
@@ -276,7 +274,7 @@ sha256_file(const char *path, char out[65])
 }
 
 int
-is_conf_file(const char *path, char newpath[MAXPATHLEN])
+is_conf_file(const char *path, char newpath[MAXPATHLEN + 1])
 {
 	size_t n;
 	char *p = NULL;
@@ -289,7 +287,7 @@ is_conf_file(const char *path, char newpath[MAXPATHLEN])
 	p = strrchr(path, '.');
 
 	if (p != NULL && !strcmp(p, ".pkgconf")) {
-		strlcpy(newpath, path, MAXPATHLEN);
+		strlcpy(newpath, path, sizeof(newpath));
 		newpath[n - 8] = '\0';
 		return (1);
 	}

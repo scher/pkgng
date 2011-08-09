@@ -26,6 +26,8 @@
 #define PKG_LICENSELOGIC -9
 #define PKG_LICENSES -10
 #define PKG_OPTIONS -11
+#define PKG_USERS -12
+#define PKG_GROUPS -13
 
 static void parse_mapping(struct pkg *, yaml_node_pair_t *, yaml_document_t *, int);
 static void parse_node(struct pkg *, yaml_node_t *, yaml_document_t *, int);
@@ -55,6 +57,8 @@ static struct manifest_key {
 	{ "message", PKG_MESSAGE},
 	{ "categories", PKG_CATEGORIES},
 	{ "options", PKG_OPTIONS},
+	{ "users", PKG_USERS},
+	{ "groups", PKG_GROUPS}
 };
 
 #define manifest_key_len (int)(sizeof(manifest_key)/sizeof(manifest_key[0]))
@@ -95,9 +99,9 @@ parse_mapping(struct pkg *pkg, yaml_node_pair_t *pair, yaml_document_t *document
 	yaml_node_pair_t *subpair;
 	char origin[BUFSIZ];
 	char version[BUFSIZ];
-	char sum[65];
-	char uname[MAXLOGNAME];
-	char gname[MAXLOGNAME];
+	char sum[SHA256_DIGEST_LENGTH * 2 + 1];
+	char uname[MAXLOGNAME + 1];
+	char gname[MAXLOGNAME + 1];
 	void *set;
 	mode_t perm;
 	pkg_script_t script_type;
@@ -122,9 +126,9 @@ parse_mapping(struct pkg *pkg, yaml_node_pair_t *pair, yaml_document_t *document
 					if (!strcasecmp(subkey->data.scalar.value, "sum") && subval->data.scalar.length == 64)
 						strlcpy(sum, subval->data.scalar.value, sizeof(sum));
 					else if (!strcasecmp(subkey->data.scalar.value, "uname") && subval->data.scalar.length <= MAXLOGNAME)
-						strlcpy(uname, subval->data.scalar.value, MAXLOGNAME);
+						strlcpy(uname, subval->data.scalar.value, sizeof(uname));
 					else if (!strcasecmp(subkey->data.scalar.value, "gname") && subval->data.scalar.length <= MAXLOGNAME)
-						strlcpy(gname, subval->data.scalar.value, MAXLOGNAME);
+						strlcpy(gname, subval->data.scalar.value, sizeof(gname));
 					else if (!strcasecmp(subkey->data.scalar.value, "perm") && subval->data.scalar.length > 0) {
 						if ((set = setmode(subval->data.scalar.value)) == NULL)
 							EMIT_PKG_ERROR("Not a valide mode: %s", subval->data.scalar.value);
@@ -242,8 +246,8 @@ parse_node(struct pkg *pkg, yaml_node_t *node, yaml_document_t *document, int pk
 	yaml_node_pair_t *pair, *p;
 	yaml_node_item_t *item;
 	yaml_node_t *nd, *pk, *pv, *key, *val;
-	char uname[MAXLOGNAME];
-	char gname[MAXLOGNAME];
+	char uname[MAXLOGNAME + 1];
+	char gname[MAXLOGNAME + 1];
 	void *set;
 	mode_t perm;
 
@@ -273,9 +277,11 @@ parse_node(struct pkg *pkg, yaml_node_t *node, yaml_document_t *document, int pk
 								key = yaml_document_get_node(document, pair->key);
 								val = yaml_document_get_node(document, pair->value);
 								if (!strcasecmp(key->data.scalar.value, "uname") && val->data.scalar.length <= MAXLOGNAME)
-									strlcpy(uname, val->data.scalar.value, MAXLOGNAME);
+									strlcpy(uname, val->data.scalar.value,
+											sizeof(uname));
 								else if (!strcasecmp(key->data.scalar.value, "gname") && val->data.scalar.length <= MAXLOGNAME)
-									strlcpy(gname, val->data.scalar.value, MAXLOGNAME);
+									strlcpy(gname, val->data.scalar.value,
+											sizeof(gname));
 								else if (!strcasecmp(key->data.scalar.value, "perm") && val->data.scalar.length > 0) {
 									if ((set = setmode(val->data.scalar.value)) == NULL)
 										EMIT_PKG_ERROR("Not a valide mode: %s", val->data.scalar.value);
@@ -314,6 +320,23 @@ parse_node(struct pkg *pkg, yaml_node_t *node, yaml_document_t *document, int pk
 						pkg_addlicense(pkg, nd->data.scalar.value);
 						++item;
 					}
+					break;
+				case PKG_USERS:
+					item = node->data.sequence.items.start;
+					while (item < node->data.sequence.items.top) {
+						nd = yaml_document_get_node(document, *item);
+						pkg_adduser(pkg, nd->data.scalar.value);
+						++item;
+					}
+					break;
+				case PKG_GROUPS:
+					item = node->data.sequence.items.start;
+					while (item < node->data.sequence.items.top) {
+						nd = yaml_document_get_node(document, *item);
+						pkg_adduser(pkg, nd->data.scalar.value);
+						++item;
+					}
+					break;
 			}
 			break;
 		case YAML_MAPPING_NODE:
@@ -363,6 +386,18 @@ yaml_write_buf(void *data, unsigned char *buffer, size_t size)
 	return (1);
 }
 
+static void
+manifest_append_seqval(yaml_document_t *doc, int parent, int *seq, const char *title, const char *value)
+{
+	if (*seq == -1) {
+		*seq = yaml_document_add_sequence(doc, NULL, YAML_FLOW_SEQUENCE_STYLE);
+		yaml_document_append_mapping_pair(doc, parent,
+				yaml_document_add_scalar(doc, NULL, __DECONST(yaml_char_t*, title), strlen(title), YAML_PLAIN_SCALAR_STYLE), *seq);
+	}
+	yaml_document_append_sequence_item(doc, *seq,
+			yaml_document_add_scalar(doc, NULL, __DECONST(yaml_char_t*, value), strlen(value), YAML_PLAIN_SCALAR_STYLE));
+}
+
 int
 pkg_emit_manifest(struct pkg *pkg, char **dest)
 {
@@ -377,17 +412,16 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 	struct pkg_script *script = NULL;
 	struct pkg_category *category = NULL;
 	struct pkg_license *license = NULL;
+	struct pkg_user *user = NULL;
+	struct pkg_group *group = NULL;
 	int rc = EPKG_OK;
 	int mapping;
+	int seq = -1;
 	int depsmap = -1;
 	int depkv;
-	int conflicts = -1;
 	int files = -1;
-	int dirs = -1;
 	int options = -1;
 	int scripts = -1;
-	int categories = -1;
-	int licenses = -1;
 	const char *script_types;
 	struct sbuf *destbuf = sbuf_new_auto();
 
@@ -426,15 +460,9 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 			break;
 	}
 
-	while (pkg_licenses(pkg, &license) == EPKG_OK) {
-		if (licenses == -1) {
-			licenses = yaml_document_add_sequence(&doc, NULL, YAML_FLOW_SEQUENCE_STYLE);
-			yaml_document_append_mapping_pair(&doc, mapping,
-					yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, "licenses"), 8, YAML_PLAIN_SCALAR_STYLE), licenses);
-		}
-		yaml_document_append_sequence_item(&doc, licenses,
-				yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, pkg_license_name(license)), strlen(pkg_license_name(license)), YAML_PLAIN_SCALAR_STYLE));
-	}
+	seq = -1;
+	while (pkg_licenses(pkg, &license) == EPKG_OK)
+		manifest_append_seqval(&doc, mapping, &seq, "licenses", pkg_license_name(license));
 
 	snprintf(tmpbuf, BUFSIZ, "%" PRId64, pkg_flatsize(pkg));
 	manifest_append_kv(mapping, "flatsize", tmpbuf);
@@ -457,27 +485,21 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 		manifest_append_kv(depkv, "version", pkg_dep_version(dep));
 	}
 
-	while (pkg_categories(pkg, &category) == EPKG_OK) {
-		if (categories == -1) {
-			categories = yaml_document_add_sequence(&doc, NULL, YAML_FLOW_SEQUENCE_STYLE);
-			yaml_document_append_mapping_pair(&doc, mapping,
-					yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, "categories"), 10, YAML_PLAIN_SCALAR_STYLE),
-					categories);
-		}
-		yaml_document_append_sequence_item(&doc, categories,
-				yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, pkg_category_name(category)), strlen(pkg_category_name(category)), YAML_PLAIN_SCALAR_STYLE));
-	}
+	seq = -1;
+	while (pkg_categories(pkg, &category) == EPKG_OK)
+		manifest_append_seqval(&doc, mapping, &seq, "categories", pkg_category_name(category));
 
-	while (pkg_conflicts(pkg, &conflict) == EPKG_OK) {
-		if (conflicts == -1) {
-			conflicts = yaml_document_add_sequence(&doc, NULL, YAML_FLOW_SEQUENCE_STYLE);
-			yaml_document_append_mapping_pair(&doc, mapping,
-					yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, "conflicts"), 9, YAML_PLAIN_SCALAR_STYLE),
-					conflicts);
-		}
-		yaml_document_append_sequence_item(&doc, conflicts,
-				yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, pkg_conflict_glob(conflict)), strlen(pkg_conflict_glob(conflict)), YAML_PLAIN_SCALAR_STYLE));
-	}
+	seq = -1;
+	while (pkg_users(pkg, &user) == EPKG_OK)
+		manifest_append_seqval(&doc, mapping, &seq, "users", pkg_user_name(user));
+
+	seq = -1;
+	while (pkg_groups(pkg, &group) == EPKG_OK)
+		manifest_append_seqval(&doc, mapping, &seq, "groups", pkg_group_name(group));
+
+	seq = -1;
+	while (pkg_conflicts(pkg, &conflict) == EPKG_OK)
+		manifest_append_seqval(&doc, mapping, &seq, "conflicts", pkg_conflict_glob(conflict));
 
 	while (pkg_options(pkg, &option) == EPKG_OK) {
 		if (options == -1) {
@@ -499,16 +521,9 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 		manifest_append_kv(files, pkg_file_path(file), pkg_file_sha256(file) && strlen(pkg_file_sha256(file)) > 0 ? pkg_file_sha256(file) : "-");
 	}
 
-	while (pkg_dirs(pkg, &dir) == EPKG_OK) {
-		if (dirs == -1) {
-			dirs = yaml_document_add_sequence(&doc, NULL, YAML_BLOCK_SEQUENCE_STYLE);
-			yaml_document_append_mapping_pair(&doc, mapping,
-					yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, "dirs"), 4, YAML_PLAIN_SCALAR_STYLE),
-					dirs);
-		}
-		yaml_document_append_sequence_item(&doc, dirs,
-				yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, pkg_dir_path(dir)), strlen(pkg_dir_path(dir)), YAML_PLAIN_SCALAR_STYLE));
-	}
+	seq = -1;
+	while (pkg_dirs(pkg, &dir) == EPKG_OK)
+		manifest_append_seqval(&doc, mapping, &seq, "dirs", pkg_dir_path(dir));
 
 	while (pkg_scripts(pkg, &script) == EPKG_OK) {
 		if (scripts == -1) {

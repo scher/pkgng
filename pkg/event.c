@@ -4,12 +4,13 @@
 #include "event.h"
 
 int
-event_callback(void *data __unused, struct pkg_event *ev)
+event_callback(void *data, struct pkg_event *ev)
 {
 	struct pkg *pkg = NULL;
 	struct pkg_dep *dep = NULL;
 	unsigned int percent;
 	const char *message;
+	int *debug = data;
 
 	switch(ev->type) {
 	case PKG_EVENT_ERRNO:
@@ -29,6 +30,7 @@ event_callback(void *data __unused, struct pkg_event *ev)
 		printf("Installing %s-%s...",
 			   pkg_get(ev->e_install_begin.pkg, PKG_NAME),
 			   pkg_get(ev->e_install_begin.pkg, PKG_VERSION));
+		fflush(stdout);
 		break;
 	case PKG_EVENT_INSTALL_FINISHED:
 		printf(" done\n");
@@ -40,6 +42,7 @@ event_callback(void *data __unused, struct pkg_event *ev)
 		printf("Deinstalling %s-%s...",
 			   pkg_get(ev->e_deinstall_begin.pkg, PKG_NAME),
 			   pkg_get(ev->e_deinstall_begin.pkg, PKG_VERSION));
+		fflush(stdout);
 		break;
 	case PKG_EVENT_DEINSTALL_FINISHED:
 		printf(" done\n");
@@ -49,6 +52,7 @@ event_callback(void *data __unused, struct pkg_event *ev)
 				pkg_get(ev->e_upgrade_finished.pkg, PKG_NAME),
 				pkg_get(ev->e_upgrade_finished.pkg, PKG_VERSION),
 				pkg_get(ev->e_upgrade_finished.pkg, PKG_NEWVERSION));
+		fflush(stdout);
 		break;
 	case PKG_EVENT_UPGRADE_FINISHED:
 		printf("done\n");
@@ -68,5 +72,9 @@ event_callback(void *data __unused, struct pkg_event *ev)
 	default:
 		break;
 	}
+
+	if (*debug > 0)
+		printf("  at %s:%d\n", ev->file, ev->line);
+
 	return 0;
 }
