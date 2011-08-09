@@ -132,6 +132,8 @@ typedef enum {
 	PKG_REPOPATH,
 	PKG_CKSUM,
 	PKG_NEWVERSION,
+	PKG_REPONAME,
+	PKG_REPOURL
 } pkg_attr;
 
 /**
@@ -748,12 +750,12 @@ int pkg_repos_conf_load(struct pkg_repos *repos);
 int pkg_repos_conf_add(struct pkg_repos *repos, struct pkg_repos_entry *re);
 
 /**
- * Adds a new repository entry to a package object
+ * Adds the URL associated with a repository to a package object
  * @param pkg A valid package object
- * @param reponame The name of the repository to be added
+ * @param reponame The name of the repository
  * @return EPKG_OK on success and EPKG_FATAL on error
  */
-int pkg_addnewrepo(struct pkg *pkg, const char *reponame);
+int pkg_add_repo_url(struct pkg *pkg, const char *reponame);
 
 /**
  * Get the next repository from the configuration file
@@ -772,15 +774,6 @@ int pkg_repos_conf_next(struct pkg_repos *repos, struct pkg_repos_entry **re);
  * to the main one, or NULL if end of list is reached.
  */
 const char * pkgdb_repos_next(struct pkgdb_it *dr_it);
-
-/**
- * Get the next repository entry in a package object
- * @param pkg A valid package object
- * @param re A pointer to a repository entry to save the result. Must be set to
- * NULL for the first repository entry
- * @return EPKG_OK on success and EPKG_END if end of repository is reached
- */
-int pkg_repos_next(struct pkg *pkg, struct pkg_repos_entry **re);
 
 /**
  * Returns the name associated with a repository entry

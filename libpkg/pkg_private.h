@@ -12,7 +12,7 @@
 
 #include "pkg_util.h"
 
-#define PKG_NUM_FIELDS 15
+#define PKG_NUM_FIELDS 17
 
 #define EXTRACT_ARCHIVE_FLAGS  (ARCHIVE_EXTRACT_OWNER |ARCHIVE_EXTRACT_PERM| \
 		ARCHIVE_EXTRACT_TIME  |ARCHIVE_EXTRACT_ACL | \
@@ -37,7 +37,6 @@ struct pkg {
 	STAILQ_HEAD(conflicts, pkg_conflict) conflicts;
 	STAILQ_HEAD(scripts, pkg_script) scripts;
 	STAILQ_HEAD(options, pkg_option) options;
-	STAILQ_HEAD(repos_entry, pkg_repos_entry) repos;
 	STAILQ_HEAD(users, pkg_user) users;
 	STAILQ_HEAD(groups, pkg_group) groups;
 	int flags;

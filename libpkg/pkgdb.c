@@ -4,6 +4,8 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <libutil.h>
 #include <regex.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -52,6 +54,7 @@ static struct column_text_mapping {
 	{ "prefix", pkg_set, PKG_PREFIX},
 	{ "cksum", pkg_set, PKG_CKSUM},
 	{ "repopath", pkg_set, PKG_REPOPATH},
+	{ "dbname", pkg_set, PKG_REPONAME},
 	{ NULL, NULL, -1 }
 };
 
@@ -107,7 +110,7 @@ populate_pkg(sqlite3_stmt *stmt, struct pkg *pkg) {
 	for (icol = 0; icol < sqlite3_column_count(stmt); icol++) {
 		colname = sqlite3_column_name(stmt, icol);
 		switch (sqlite3_column_type(stmt, icol)) {
-			case  SQLITE_TEXT:
+			case SQLITE_TEXT:
 				for (i = 0; columns_text[i].name != NULL; i++ ) {
 					if (!strcmp(columns_text[i].name, colname)) {
 						columns_text[i].set_text(pkg, columns_text[i].type, sqlite3_column_text(stmt, icol));
@@ -840,7 +843,7 @@ pkgdb_query_remote(struct pkgdb *db, const char *pattern)
 	const char *multireposql = ""
 		"SELECT id AS rowid, origin, name, version, comment, desc, "
 			"arch, osversion, maintainer, www, pkgsize, "
-			"flatsize AS newflatsize, cksum, path AS repopath, '%s' AS dbname "
+			"flatsize AS newflatsize, cksum, path, '%s' AS dbname "
 		"FROM '%s'.packages "
 		"WHERE origin = ?1 ";
 	const char *sql_deps = ""
@@ -885,7 +888,7 @@ pkgdb_query_remote(struct pkgdb *db, const char *pattern)
 		}
 
 		while ((dbname = pkgdb_repos_next(it)) != NULL) {
-			sbuf_cat(sql, "UNION ");
+			sbuf_cat(sql, " UNION ");
 			snprintf(tmpbuf, sizeof(tmpbuf), multireposql, dbname, dbname);
 			sbuf_cat(sql, tmpbuf);
 		}
@@ -923,9 +926,8 @@ pkgdb_query_remote(struct pkgdb *db, const char *pattern)
 	populate_pkg(stmt, pkg);
 
 	if (multi_repos == 1) {
-		pkg_addnewrepo(pkg, sqlite3_column_text(stmt, 14));
 		/* we do the search of deps only in the repository of pkg */
-		snprintf(tmpbuf, sizeof(tmpbuf), sql_deps, sqlite3_column_text(stmt, 14));
+		snprintf(tmpbuf, sizeof(tmpbuf), sql_deps, pkg_get(pkg, PKG_REPONAME));
 	} else {
 		/* the search of deps is only in the 'remote' database (PACKAGESITE is set) */
 		snprintf(tmpbuf, sizeof(tmpbuf), sql_deps, "remote");
@@ -2035,11 +2037,11 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	struct sbuf *sql = NULL;
 	struct pkgdb_it *it = NULL;
 	const char *basesql      = "SELECT origin, name, version, comment, "
-					"desc, arch, arch, osversion, maintainer, www, "
-					"flatsize, pkgsize, cksum, path AS repopath ";
+					"desc, arch, osversion, maintainer, www, "
+					"flatsize as newflatsize, pkgsize, cksum, path AS repopath ";
 	const char *multireposql = "SELECT origin, name, version, comment, "
-					"desc, arch, arch, osversion, maintainer, www, "
-					"flatsize, pkgsize, cksum, path AS repopath, '%s' AS dbnamae "
+					"desc, arch, osversion, maintainer, www, "
+					"flatsize, pkgsize, cksum, path, '%s' AS dbname "
 					"FROM '%s'.packages WHERE ";
 
 	assert(pattern != NULL && pattern[0] != '\0');
@@ -2070,7 +2072,6 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 		if ((dbname = pkgdb_repos_next(it)) != NULL) {
 			sbuf_cat(sql, "(");
 			snprintf(tmpbuf, sizeof(tmpbuf), multireposql, dbname, dbname);
-
 			sbuf_cat(sql, tmpbuf);
 			pkgdb_rquery_build_search_query(sql, match, field);
 		} else {
@@ -2082,9 +2083,8 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 		}
 
 		while ((dbname = pkgdb_repos_next(it)) != NULL) {
-			sbuf_cat(sql, "UNION ");
+			sbuf_cat(sql, " UNION ");
 			snprintf(tmpbuf, sizeof(tmpbuf), multireposql, dbname, dbname);
-
 			sbuf_cat(sql, tmpbuf);
 			pkgdb_rquery_build_search_query(sql, match, field);
 		}

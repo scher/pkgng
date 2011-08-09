@@ -87,12 +87,10 @@ pkg_repo_fetch(struct pkg *pkg)
 			(pkg_config("PACKAGESITE") == NULL)) {
 		/* 
 		 * PACKAGESITE is not set
-		 * Get the URL from the package repository entry
+		 * Get the URL from the package itself
 		 */
 
-		pkg_repos_next(pkg, &re);
-		
-		asprintf(&url, "%s/%s", pkg_repos_get_url(re),
+		asprintf(&url, "%s/%s", pkg_get(pkg, PKG_REPOURL),
 				pkg_get(pkg, PKG_REPOPATH));
 	} else {
 		/* PACKAGESITE is set */
@@ -270,22 +268,6 @@ pkg_repos_conf_free(struct pkg_repos *repos)
         }
 
         free(repos);
-}
-
-int
-pkg_repos_next(struct pkg *pkg, struct pkg_repos_entry **re)
-{
-	assert(pkg != NULL);
-
-	if (*re == NULL)
-		*re = STAILQ_FIRST(&pkg->repos);
-	else
-		*re = STAILQ_NEXT(*re, entries);
-
-	if (*re == NULL)
-		return (EPKG_END);
-	else
-		return (EPKG_OK);
 }
 
 static RSA *

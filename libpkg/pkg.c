@@ -43,6 +43,8 @@ pkg_new(struct pkg **pkg, pkg_t type)
 		{PKG_REPOPATH, PKG_REMOTE|PKG_UPGRADE, 0},
 		{PKG_CKSUM, PKG_REMOTE|PKG_UPGRADE, 0},
 		{PKG_NEWVERSION, PKG_UPGRADE, 0},
+		{PKG_REPONAME, PKG_REMOTE|PKG_UPGRADE, 1},
+		{PKG_REPOURL, PKG_REMOTE|PKG_UPGRADE, 1}
 	};
 
 	for (int i = 0; i < PKG_NUM_FIELDS; i++) {
@@ -59,7 +61,6 @@ pkg_new(struct pkg **pkg, pkg_t type)
 	STAILQ_INIT(&(*pkg)->conflicts);
 	STAILQ_INIT(&(*pkg)->scripts);
 	STAILQ_INIT(&(*pkg)->options);
-	STAILQ_INIT(&(*pkg)->repos);
 	STAILQ_INIT(&(*pkg)->users);
 	STAILQ_INIT(&(*pkg)->groups);
 
@@ -119,7 +120,6 @@ pkg_free(struct pkg *pkg)
 	pkg_freeconflicts(pkg);
 	pkg_freescripts(pkg);
 	pkg_freeoptions(pkg);
-	pkg_freerepos(pkg);
 	pkg_freeusers(pkg);
 	pkg_freegroups(pkg);
 
@@ -170,6 +170,12 @@ pkg_set(struct pkg * pkg, pkg_attr attr, const char *value)
 		sbuf_finish(*sbuf);
 		return (EPKG_OK);
 	}
+
+	/* 
+	 * Insert the repository URL as well
+	 */
+	if (attr == PKG_REPONAME)
+		pkg_add_repo_url(pkg, value);
 
 	return (sbuf_set(sbuf, value));
 }
@@ -952,25 +958,6 @@ pkg_freeoptions(struct pkg *pkg)
 	pkg->flags &= ~PKG_LOAD_OPTIONS;
 }
 
-void
-pkg_freerepos(struct pkg *pkg)
-{
-	struct pkg_repos_entry *re = NULL;
-
-	if (pkg == NULL)
-		return;
-
-	while (!STAILQ_EMPTY(&pkg->repos)) {
-		re = STAILQ_FIRST(&pkg->repos);
-		STAILQ_REMOVE_HEAD(&pkg->repos, entries);
-		
-		sbuf_delete(re->name);
-		sbuf_delete(re->url);
-
-		free(re);
-	}
-}
-
 int
 pkg_open(struct pkg **pkg_p, const char *path)
 {
@@ -1106,18 +1093,12 @@ pkg_copy_tree(struct pkg *pkg, const char *src, const char *dest)
 }
 
 int
-pkg_addnewrepo(struct pkg *pkg, const char *reponame)
+pkg_add_repo_url(struct pkg *pkg, const char *reponame)
 {
-	struct pkg_repos_entry *re = NULL;
 	properties p = NULL;
 	int fd = -1;
 
 	assert(pkg != NULL && reponame != NULL);
-
-	if ((re = calloc(1, sizeof(struct pkg_repos_entry))) == NULL) {
-		EMIT_ERRNO("calloc", "pkg_repos_entry");
-		return (EPKG_FATAL);
-	}
 
 	/* 
 	 * We have the repo name, now we need to find it's URL
@@ -1127,13 +1108,10 @@ pkg_addnewrepo(struct pkg *pkg, const char *reponame)
 		EMIT_ERRNO("open", "/etc/pkg/repositories");
 		return (EPKG_FATAL);
 	}
-	
+
 	p = properties_read(fd);
 
-	sbuf_set(&re->name, reponame);
-	sbuf_set(&re->url, property_find(p, reponame));
-
-	STAILQ_INSERT_TAIL(&pkg->repos, re, entries);
+	pkg_set(pkg, PKG_REPOURL, property_find(p, reponame));
 
 	properties_free(p);
 	close(fd);
