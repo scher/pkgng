@@ -29,7 +29,6 @@ exec_search(int argc, char **argv)
 	struct pkgdb *db = NULL;
 	struct pkgdb_it *it = NULL;
 	struct pkg *pkg = NULL;
-	struct pkg_repos_entry *re = NULL;
 
 	while ((ch = getopt(argc, argv, "gxXcd")) != -1) {
 		switch (ch) {
@@ -64,20 +63,18 @@ exec_search(int argc, char **argv)
 
 	pattern = argv[0];
 
-	if (pkgdb_open(&db, PKGDB_REMOTE) != EPKG_OK) {
-		retcode = EPKG_FATAL;
-		goto cleanup;
-	}
+	if (pkgdb_open(&db, PKGDB_REMOTE) != EPKG_OK)
+		return (EPKG_FATAL);
 
 	if ((it = pkgdb_rquery(db, pattern, match, field)) == NULL) {
-		retcode = EPKG_FATAL;
-		goto cleanup;
+		pkgdb_close(db);
+		return (EPKG_FATAL);
 	}
 
 	if (((strcmp(pkg_config("PKG_MULTIREPOS"), "true") == 0)) && (pkg_config("PACKAGESITE") == NULL))
 		multi_repos = 1;
 
-	while (( retcode = pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC)) == EPKG_OK) {
+	while ((retcode = pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC)) == EPKG_OK) {
 		printf("Name       : %s\n", pkg_get(pkg, PKG_NAME));
 		printf("Version    : %s\n", pkg_get(pkg, PKG_VERSION));
 		printf("Origin     : %s\n", pkg_get(pkg, PKG_ORIGIN));
@@ -86,19 +83,15 @@ exec_search(int argc, char **argv)
 		printf("WWW        : %s\n", pkg_get(pkg, PKG_WWW));
 		printf("Comment    : %s\n", pkg_get(pkg, PKG_COMMENT));
 
-		if (multi_repos == 1) {
-			pkg_repos_next(pkg, &re);
-			printf("Repository : %s [%s]\n", pkg_repos_get_name(re), pkg_repos_get_url(re));
-		}
+		if (multi_repos == 1)
+			printf("Repository : %s [%s]\n", pkg_get(pkg, PKG_REPONAME), pkg_get(pkg, PKG_REPOURL));
 
 		humanize_number(size, sizeof(size), pkg_new_flatsize(pkg), "B", HN_AUTOSCALE, 0);
 		printf("Flat size  : %s\n", size);
 		humanize_number(size, sizeof(size), pkg_new_pkgsize(pkg), "B", HN_AUTOSCALE, 0);
-		printf("Pkg size   : %s\n", size);
-		printf("\n");
+		printf("Pkg size   : %s\n\n", size);
 	}
 
-	cleanup:
 	pkg_free(pkg);
 	pkgdb_it_free(it);
 	pkgdb_close(db);

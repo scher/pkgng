@@ -62,7 +62,6 @@ pkg_repo_fetch(struct pkg *pkg)
 	char *path = NULL;
 	char *url  = NULL;;
 	int retcode = EPKG_OK;
-	struct pkg_repos_entry *re = NULL;
 
 	assert((pkg->type & PKG_REMOTE) == PKG_REMOTE ||
 		(pkg->type & PKG_UPGRADE) == PKG_UPGRADE);
