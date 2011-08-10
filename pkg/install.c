@@ -28,7 +28,6 @@ exec_install(int argc, char **argv)
 	struct pkgdb *db = NULL;
 	struct pkg_jobs *jobs = NULL;
 	int retcode = EPKG_OK;
-	int multi_repos = 0;
 	int i, ch, yes = 0;
 	match_t match = MATCH_EXACT;
 
@@ -79,9 +78,8 @@ exec_install(int argc, char **argv)
 			goto cleanup;
 		}
 
-		while (( retcode = pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC)) == EPKG_OK) {
+		while ((retcode = pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC)) == EPKG_OK) 
 			pkg_jobs_add(jobs, pkgdb_query_remote(db, pkg_get(pkg, PKG_ORIGIN)));
-		}
 		
 		pkgdb_it_free(it);
 	}
@@ -91,17 +89,8 @@ exec_install(int argc, char **argv)
 	pkg = NULL;
 	printf("The following packages will be installed:\n");
 
-	if ((strcmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) && (pkg_config("PACKAGESITE") == NULL))
-		multi_repos = 1;
-
-	while (pkg_jobs(jobs, &pkg) == EPKG_OK) {
-		printf("\t%s-%s", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
-		
-		if (multi_repos == 1)
-			printf(" [ from repository %s ]", pkg_get(pkg, PKG_REPONAME));
-
-		printf("\n");
-	}
+	while (pkg_jobs(jobs, &pkg) == EPKG_OK)
+		printf("\t%s-%s\n", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
 
 	if (yes == 0)
 		yes = query_yesno("\nProceed with installing packages [y/N]: ");
