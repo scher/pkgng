@@ -172,7 +172,7 @@ pkg_set(struct pkg * pkg, pkg_attr attr, const char *value)
 	}
 
 	/* 
-	 * Insert the repository URL as well
+	 * Insert the repository URL as well when inserting the repo name
 	 */
 	if (attr == PKG_REPONAME)
 		pkg_add_repo_url(pkg, value);
