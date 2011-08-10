@@ -23,7 +23,7 @@ split_version(const char *pkgname, const char **endname, unsigned long *epoch, u
 	const char *endversionstr;
 
 	if (pkgname == NULL) {
-		EMIT_PKG_ERROR("%s: Passed NULL pkgname.", __func__);
+		pkg_emit_error("%s: Passed NULL pkgname.", __func__);
 		return (NULL);
 	}
 
@@ -127,7 +127,7 @@ get_component(const char *position, version_component *component)
 	int hasstage = 0, haspatchlevel = 0;
 
 	if (!pos) {
-		EMIT_PKG_ERROR("%s: Passed NULL position.", __func__);
+		pkg_emit_error("%s: Passed NULL position.", __func__);
 		return (NULL);
 	}
 

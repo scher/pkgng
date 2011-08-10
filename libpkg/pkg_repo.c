@@ -123,7 +123,7 @@ int
 pkg_repos_conf_new(struct pkg_repos **repos)
 {
         if ((*repos = calloc(1, sizeof(struct pkg_repos))) == NULL) {
-                EMIT_ERRNO("calloc", "pkg_repos");
+                pkg_emit_errno("calloc", "pkg_repos");
                 return (EPKG_FATAL);
         }
 
@@ -145,7 +145,7 @@ pkg_repos_conf_load(struct pkg_repos *repos)
         assert(repos != NULL);
 
         if ((fp = fopen("/etc/pkg/repositories", "r")) == NULL) {
-                EMIT_ERRNO("fopen", "/etc/pkg/repositories");
+                pkg_emit_errno("fopen", "/etc/pkg/repositories");
                 return (EPKG_FATAL);
         }
 
@@ -167,12 +167,12 @@ pkg_repos_conf_load(struct pkg_repos *repos)
 
 		/* only name and url are needed for the repository */
                 if (count != 2) {
-                        EMIT_PKG_ERROR("Wrong repository format at line %d (ignoring repository)", line);
+                        pkg_emit_error("Wrong repository format at line %d (ignoring repository)", line);
                         continue;
                 }
 
                 if ((re = calloc(1, sizeof(struct pkg_repos_entry))) == NULL) {
-                        EMIT_ERRNO("calloc", "pkg_repos_entry");
+                        pkg_emit_errno("calloc", "pkg_repos_entry");
                         return (EPKG_FATAL);
                 }
 
@@ -194,7 +194,7 @@ pkg_repos_conf_add(struct pkg_repos *repos, struct pkg_repos_entry *re)
         assert(repos != NULL && re != NULL);
 
         if (pkg_repos_is_reserved_name(repos, re) != EPKG_OK) {
-                EMIT_PKG_ERROR("Repository name '%s' is already reserved (ignoring repository at line %d)",
+                pkg_emit_error("Repository name '%s' is already reserved (ignoring repository at line %d)",
                                 pkg_repos_get_name(re), pkg_repos_get_line(re));
 
                 sbuf_free(re->name);

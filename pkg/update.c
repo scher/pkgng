@@ -32,7 +32,6 @@ update_from_remote_repo(const char *name, const char *url)
 	char repofile_unchecked[MAXPATHLEN];
 	char *tmp = NULL;
 	const char *dbdir = NULL;
-	int retcode = EPKG_OK;
 	unsigned char *sig = NULL;
 	int siglen = 0;
 

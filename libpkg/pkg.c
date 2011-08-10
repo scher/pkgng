@@ -1106,7 +1106,7 @@ pkg_add_repo_url(struct pkg *pkg, const char *reponame)
 	 * Using properties(3) here, as we know the 'key' already
 	 */
 	if ((fd = open("/etc/pkg/repositories", O_RDONLY)) < 0) {
-		EMIT_ERRNO("open", "/etc/pkg/repositories");
+		pkg_emit_errno("open", "/etc/pkg/repositories");
 		return (EPKG_FATAL);
 	}
 

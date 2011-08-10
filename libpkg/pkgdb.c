@@ -488,7 +488,7 @@ pkgdb_open(struct pkgdb **db, pkgdb_t type)
 			fprintf(stderr, "\t/!\\		     YOU HAVE BEEN WARNED		/!\\\n\n");
 
 			if (pkg_repos_conf_new(&repos) != EPKG_OK) {
-				EMIT_PKG_ERROR("pkg_repos_new: %s", "cannot create multi repo object");
+				pkg_emit_error("pkg_repos_new: %s", "cannot create multi repo object");
 				return (EPKG_FATAL);
 			}
 
@@ -518,7 +518,7 @@ pkgdb_open(struct pkgdb **db, pkgdb_t type)
 			sbuf_finish(sql);
 
 			if (sqlite3_exec((*db)->sqlite, sbuf_get(sql), NULL, NULL, &errmsg) != SQLITE_OK) {
-				EMIT_PKG_ERROR("sqlite: %s", errmsg);
+				pkg_emit_error("sqlite: %s", errmsg);
 				sbuf_delete(sql);
 				return (EPKG_FATAL);
 			}
@@ -533,14 +533,14 @@ pkgdb_open(struct pkgdb **db, pkgdb_t type)
 			snprintf(remotepath, sizeof(remotepath), "%s/repo.sqlite", dbdir);
 
 			if (access(remotepath, R_OK) != 0) {
-				EMIT_ERRNO("access", remotepath);
+				pkg_emit_error("access", remotepath);
 				return (EPKG_FATAL);
 			}
 
 			sqlite3_snprintf(sizeof(tmpbuf), tmpbuf, "ATTACH '%s' AS remote;", remotepath);
 
 			if (sqlite3_exec((*db)->sqlite, tmpbuf, NULL, NULL, &errmsg) != SQLITE_OK) {
-				EMIT_PKG_ERROR("sqlite: %s", errmsg);
+				pkg_emit_error("sqlite: %s", errmsg);
 				return (EPKG_FATAL);
 			}
 		}
@@ -595,7 +595,7 @@ pkgdb_close(struct pkgdb *db)
 				 * Detach the remote repositories from the main database
 				 */
 				if ((it = pkgdb_repos_new(db)) == NULL) {
-					EMIT_PKG_ERROR("pkgdb_repos_new: %s", "cannot get the attached databases");
+					pkg_emit_error("pkgdb_repos_new: %s", "cannot get the attached databases");
 					return;
 				}
 
@@ -871,7 +871,7 @@ pkgdb_query_remote(struct pkgdb *db, const char *pattern)
 		sbuf_cat(sql, ", dbname FROM ");
 
 		if ((it = pkgdb_repos_new(db)) == NULL) {
-			EMIT_PKG_ERROR("%s", "cannot get the attached databases");
+			pkg_emit_error("%s", "cannot get the attached databases");
 			return (NULL);
 		}
 
@@ -2048,7 +2048,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	assert(pattern != NULL && pattern[0] != '\0');
 
 	if (db->type != PKGDB_REMOTE) {
-		EMIT_PKG_ERROR("%s", "remote database not attached (misuse)");
+		pkg_emit_error("%s", "remote database not attached (misuse)");
 		return (NULL);
 	}
 
@@ -2065,7 +2065,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 		sbuf_cat(sql, ", dbname FROM ");
 
 		if ((it = pkgdb_repos_new(db)) == NULL) {
-			EMIT_PKG_ERROR("%s", "cannot get the attached databases");
+			pkg_emit_error("%s", "cannot get the attached databases");
 			return (NULL);
 		}
 
