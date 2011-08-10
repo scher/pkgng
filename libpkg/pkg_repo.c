@@ -76,7 +76,7 @@ pkg_repo_fetch(struct pkg *pkg)
 
 	/* Create the dirs in cachedir */
 	if ((path = dirname(dest)) == NULL) {
-		EMIT_ERRNO("dirname", dest);
+		pkg_emit_errno("dirname", dest);
 		retcode = EPKG_FATAL;
 		goto cleanup;
 	}
@@ -107,7 +107,8 @@ pkg_repo_fetch(struct pkg *pkg)
 	retcode = sha256_file(dest, cksum);
 	if (retcode == EPKG_OK)
 		if (strcmp(cksum, pkg_get(pkg, PKG_CKSUM))) {
-			EMIT_FAILED_CKSUM(pkg);
+			pkg_emit_error("%s failed checksum from repo",
+						   pkg_get(pkg, PKG_NAME));
 			retcode = EPKG_FATAL;
 		}
 
@@ -301,12 +302,13 @@ load_rsa_public_key(const char *rsa_key_path)
 	char errbuf[1024];
 
 	if ((fp = fopen(rsa_key_path, "rb")) == 0) {
-		EMIT_ERRNO("Error reading public key(%s)", rsa_key_path);
+		pkg_emit_errno("fopen", rsa_key_path);
 		return (NULL);
 	}
 
 	if (!PEM_read_RSA_PUBKEY( fp, &rsa, NULL, NULL )) {
-		EMIT_PKG_ERROR("Error reading public key(%s): %s", rsa_key_path, ERR_error_string(ERR_get_error(), errbuf));
+		pkg_emit_error("error reading public key(%s): %s", rsa_key_path,
+					   ERR_error_string(ERR_get_error(), errbuf));
 		fclose(fp);
 		return (NULL);
 	}
@@ -333,7 +335,8 @@ pkg_repo_verify(const char *path, unsigned char *sig, unsigned int sig_len)
 		return(EPKG_FATAL);
 
 	if (RSA_verify(NID_sha1, sha256, sizeof(sha256), sig, sig_len, rsa) == 0) {
-		EMIT_PKG_ERROR("%s: %s", pkg_config("PUBKEY"), ERR_error_string(ERR_get_error(), errbuf));
+		pkg_emit_error("%s: %s", pkg_config("PUBKEY"),
+					   ERR_error_string(ERR_get_error(), errbuf));
 		return (EPKG_FATAL);
 	}
 
@@ -437,7 +440,7 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 		"VALUES (?1, (SELECT id FROM categories WHERE name = ?2));";
 
 	if (!is_dir(path)) {
-		EMIT_PKG_ERROR("%s is not a directory", path);
+		pkg_emit_error("%s is not a directory", path);
 		return EPKG_FATAL;
 	}
 
@@ -448,7 +451,7 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 
 	if (stat(repodb, &st) != -1)
 		if (unlink(repodb) != 0) {
-			EMIT_ERRNO("unlink", path);
+			pkg_emit_errno("unlink", path);
 			return EPKG_FATAL;
 		}
 
@@ -459,14 +462,14 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 	}
 
 	if (sqlite3_exec(sqlite, initsql, NULL, NULL, &errmsg) != SQLITE_OK) {
-		EMIT_PKG_ERROR("sqlite: %s", errmsg);
+		pkg_emit_error("sqlite: %s", errmsg);
 		retcode = EPKG_FATAL;
 		goto cleanup;
 	}
 
 	if (sqlite3_exec(sqlite, "BEGIN TRANSACTION;", NULL, NULL, &errmsg) !=
 		SQLITE_OK) {
-		EMIT_PKG_ERROR("sqlite: %s", errmsg);
+		pkg_emit_error("sqlite: %s", errmsg);
 		retcode = EPKG_FATAL;
 		goto cleanup;
 	}
@@ -496,7 +499,7 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 	}
 
 	if ((fts = fts_open(repopath, FTS_PHYSICAL, NULL)) == NULL) {
-		EMIT_ERRNO("fts_open", path);
+		pkg_emit_errno("fts_open", path);
 		retcode = EPKG_FATAL;
 		goto cleanup;
 	}
@@ -628,7 +631,7 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 	}
 
 	if (sqlite3_exec(sqlite, "COMMIT;", NULL, NULL, &errmsg) != SQLITE_OK) {
-		EMIT_PKG_ERROR("sqlite: %s", errmsg);
+		pkg_emit_error("sqlite: %s", errmsg);
 		retcode = EPKG_FATAL;
 	}
 
@@ -686,7 +689,7 @@ pkg_finish_repo(char *path, pem_password_cb *password_cb, char *rsa_key_path)
 	packing_init(&pack, repo_archive, TXZ);
 	if (rsa_key_path != NULL) {
 		if (access(rsa_key_path, R_OK) == -1) {
-			EMIT_ERRNO("access", rsa_key_path);
+			pkg_emit_errno("access", rsa_key_path);
 			return EPKG_FATAL;
 		}
 
@@ -704,7 +707,7 @@ pkg_finish_repo(char *path, pem_password_cb *password_cb, char *rsa_key_path)
 
 		if (RSA_sign(NID_sha1, sha256, sizeof(sha256), sigret, &siglen, rsa) == 0) {
 			/* XXX pass back RSA errors correctly */
-			EMIT_PKG_ERROR("%s: %lu", rsa_key_path, ERR_get_error());
+			pkg_emit_error("%s: %lu", rsa_key_path, ERR_get_error());
 			return EPKG_FATAL;
 		}
 
