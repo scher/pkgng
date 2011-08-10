@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include <openssl/err.h>
+#include <openssl/sha.h>
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
 
@@ -714,6 +715,7 @@ pkg_finish_repo(char *path, pem_password_cb *password_cb, char *rsa_key_path)
 		ERR_free_strings();
 	}
 	packing_append_file(pack, repo_path, "repo.sqlite");
+	unlink(repo_path);
 	packing_finish(pack);
 
 	return (EPKG_OK);
