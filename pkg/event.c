@@ -1,14 +1,19 @@
+#include <sys/param.h>
+#include <string.h>
 #include <err.h>
 
 #include "pkg.h"
+#include "progressmeter.h"
 #include "event.h"
+
+static off_t fetched = 0;
+static char url[MAXPATHLEN+1];
 
 int
 event_callback(void *data, struct pkg_event *ev)
 {
 	struct pkg *pkg = NULL;
 	struct pkg_dep *dep = NULL;
-	unsigned int percent;
 	const char *message;
 	int *debug = data;
 	(void)debug;
@@ -21,11 +26,15 @@ event_callback(void *data, struct pkg_event *ev)
 		warnx("%s", ev->e_pkg_error.msg);
 		break;
 	case PKG_EVENT_FETCHING:
-		percent = ((float)ev->e_fetching.done / (float)ev->e_fetching.total) * 100;
-		printf("\rFetching %s... %d%%", ev->e_fetching.url, percent);
-		if (ev->e_fetching.done == ev->e_fetching.total)
-			printf("\n");
-		fflush(stdout);
+		if (fetched == 0) {
+			strlcpy(url, ev->e_fetching.url, sizeof(url));
+			start_progress_meter(url, ev->e_fetching.total, &fetched);
+		}
+		fetched = ev->e_fetching.done;
+		if (ev->e_fetching.done == ev->e_fetching.total) {
+			stop_progress_meter();
+			fetched = 0;
+		}
 		break;
 	case PKG_EVENT_INSTALL_BEGIN:
 		printf("Installing %s-%s...",
