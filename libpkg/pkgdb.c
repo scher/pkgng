@@ -882,20 +882,18 @@ pkgdb_is_dir_used(struct pkgdb *db, const char *dir, int64_t *res)
 int
 pkgdb_loaddeps(struct pkgdb *db, struct pkg *pkg)
 {
-	sqlite3_stmt *stmt;
-	int ret;
-	const char *sql;
-	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
-		sql = ""
+	sqlite3_stmt *stmt = NULL;
+	int ret = EPKG_OK;
+	char sql[BUFSIZ];
+	const char *basesql = "" 
 			"SELECT d.name, d.origin, d.version "
-			"FROM remote.deps AS d "
+			"FROM '%s'.deps AS d "
 			"WHERE d.package_id = ?1;";
-	} else {
-		sql = ""
-			"SELECT d.name, d.origin, d.version "
-			"FROM main.deps AS d "
-			"WHERE d.package_id = ?1;";
-	}
+
+	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE)
+		snprintf(sql, sizeof(sql), basesql, pkg_get(pkg, PKG_REPONAME));
+	else
+		snprintf(sql, sizeof(sql), basesql, "main");
 
 	if (pkg->flags & PKG_LOAD_DEPS)
 		return (EPKG_OK);
@@ -1016,22 +1014,20 @@ pkgdb_loaddirs(struct pkgdb *db, struct pkg *pkg)
 int
 pkgdb_loadlicense(struct pkgdb *db, struct pkg *pkg)
 {
-	const char *sql;
+	char sql[BUFSIZ];
+	const char *reponame = NULL;
+	const char *basesql = "" 
+			"SELECT l.name "
+			"FROM '%s'.pkg_licenses, '%s'.licenses AS l "
+			"WHERE package_id = ?1 "
+			"AND license_id = l.id "
+			"ORDER by name DESC";
+
 	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
-		sql = ""
-			"SELECT name "
-			"FROM remote.pkg_licenses, remote.licenses AS l "
-			"WHERE package_id = ?1 "
-			"AND license_id = l.id "
-			"ORDER by name DESC";
-	} else {
-		sql = ""
-			"SELECT name "
-			"FROM main.pkg_licenses, main.licenses AS l "
-			"WHERE package_id = ?1 "
-			"AND license_id = l.id "
-			"ORDER by name DESC";
-	}
+		reponame = pkg_get(pkg, PKG_REPONAME);
+		snprintf(sql, sizeof(sql), basesql, reponame, reponame);
+	} else
+		snprintf(sql, sizeof(sql), basesql, "main", "main");
 
 	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_LICENSES, pkg_addlicense, PKG_LICENSES));
 }
@@ -1039,22 +1035,20 @@ pkgdb_loadlicense(struct pkgdb *db, struct pkg *pkg)
 int
 pkgdb_loadcategory(struct pkgdb *db, struct pkg *pkg)
 {
-	const char *sql;
+	char sql[BUFSIZ];
+	const char *reponame = NULL;
+	const char *basesql = ""
+			"SELECT name "
+			"FROM '%s'.pkg_categories, '%s'.categories AS c "
+			"WHERE package_id = ?1 "
+			"AND category_id = c.id "
+			"ORDER by name DESC";
+
 	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
-		sql = ""
-			"SELECT name "
-			"FROM remote.pkg_categories, remote.categories AS c "
-			"WHERE package_id = ?1 "
-			"AND category_id = c.id "
-			"ORDER by name DESC";
-	} else {
-		sql = ""
-			"SELECT name "
-			"FROM main.pkg_categories, main.categories AS c "
-			"WHERE package_id = ?1 "
-			"AND category_id = c.id "
-			"ORDER by name DESC";
-	}
+		reponame = pkg_get(pkg, PKG_REPONAME);
+		snprintf(sql, sizeof(sql), basesql, reponame, reponame);
+	} else
+		snprintf(sql, sizeof(sql), basesql, "main", "main");
 
 	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_CATEGORIES, pkg_addcategory, PKG_CATEGORIES));
 }
@@ -1138,23 +1132,21 @@ pkgdb_loadscripts(struct pkgdb *db, struct pkg *pkg)
 int
 pkgdb_loadoptions(struct pkgdb *db, struct pkg *pkg)
 {
-	sqlite3_stmt *stmt;
-	int ret;
-	const char *sql;
-	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
-		sql = ""
+	sqlite3_stmt *stmt = NULL;
+	int ret = EPKG_OK;
+	char sql[BUFSIZ];
+	const char *basesql = ""
 		"SELECT option, value "
-		"FROM remote.options "
+		"FROM '%s'.options "
 		"WHERE package_id = ?1";
-	} else {
-		sql = ""
-		"SELECT option, value "
-		"FROM main.options "
-		"WHERE package_id = ?1";
-	}
 
 	if (pkg->flags & PKG_LOAD_OPTIONS)
 		return (EPKG_OK);
+
+	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE)
+		snprintf(sql, sizeof(sql), basesql, pkg_get(pkg, PKG_REPONAME));
+	else
+		snprintf(sql, sizeof(sql), basesql, "main");
 
 	if (sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL) != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
