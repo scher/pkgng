@@ -23,11 +23,30 @@ SRCS=		add.c \
 BINDIR=		/usr/sbin
 
 DEBUG_FLAGS+=	-g -O0
+.if defined(PROFILE_BUILD)
+DEBUG_FLAGS+=	-pg
+STATIC_PKGNG=	yes
+.endif
+
 CFLAGS+=	-I${.CURDIR}/../libpkg
-LDADD+=		-L../libpkg \
-		-lpkgng \
+LDADD+=		-L${.CURDIR}/../libpkg \
 		-lutil \
 		-ljail
+.if defined(STATIC_PKGNG)
+LDADD+=		${.CURDIR}/../libpkg/libpkg.a \
+		-L${.CURDIR}/../external/sqlite \
+		-L${.CURDIR}/../external/libyaml \
+		-lsqlite3 \
+		-lyaml \
+		-larchive \
+		-lsbuf \
+		-lfetch \
+		-lelf \
+		-lpthread
+.else
+LDADD+=		-lpkg
+.endif
+
 WARNS?=		6
 MAN=	pkg.1 \
 	pkg-add.1 \

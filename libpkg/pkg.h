@@ -137,6 +137,20 @@ typedef enum {
 	PKG_REPOURL
 } pkg_attr;
 
+typedef enum {
+	PKG_DEPS = 0,
+	PKG_RDEPS,
+	PKG_LICENSES,
+	PKG_OPTIONS,
+	PKG_CATEGORIES,
+	PKG_FILES,
+	PKG_DIRS,
+	PKG_USERS,
+	PKG_GROUPS,
+	PKG_CONFLICTS,
+	PKG_SCRIPTS
+} pkg_list;
+
 /**
  * Determine the type of a pkg_script.
  */
@@ -239,7 +253,7 @@ int64_t pkg_new_flatsize(struct pkg *);
  */
 int64_t pkg_new_pkgsize(struct pkg *);
 
-
+int pkg_list_empty(struct pkg *, pkg_list);
 /**
  * Iterates over the dependencies of the package.
  * @param dep Must be set to NULL for the first call.
@@ -568,13 +582,6 @@ struct pkgdb_it * pkgdb_query(struct pkgdb *db, const char *pattern,
 							  match_t type);
 struct pkgdb_it * pkgdb_rquery(struct pkgdb *db, const char *pattern,
 		match_t type, unsigned int field);
-
-/**
- * Query the remote database.
- * @param db A pkgdb opened with PKGDB_REMOTE.
- * @warning Returns NULL on failure.
- */
-struct pkg * pkgdb_query_remote(struct pkgdb *db, const char *pattern);
 
 /**
  * 

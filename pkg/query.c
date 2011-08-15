@@ -43,6 +43,9 @@ format_str(struct pkg *pkg, struct sbuf *dest, const char *qstr, void *data)
 				case 'w':
 					sbuf_cat(dest, pkg_get(pkg, PKG_WWW));
 					break;
+				case 'a':
+					sbuf_printf(dest, "%d", pkg_isautomatic(pkg));
+					break;
 				case 's':
 					qstr++;
 					if (qstr[0] == 'h') {
@@ -50,6 +53,41 @@ format_str(struct pkg *pkg, struct sbuf *dest, const char *qstr, void *data)
 						sbuf_cat(dest, size);
 					} else if (qstr[0] == 'b') {
 						sbuf_printf(dest, "%" PRId64, pkg_flatsize(pkg));
+					}
+					break;
+				case '?':
+					qstr++;
+					switch (qstr[0]) {
+						case 'd':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_DEPS));
+							break;
+						case 'r':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_RDEPS));
+							break;
+						case 'C':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_CATEGORIES));
+							break;
+						case 'F':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_FILES));
+							break;
+						case 'O':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_OPTIONS));
+							break;
+						case 'D':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_DIRS));
+							break;
+						case 'L':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_LICENSES));
+							break;
+						case 'U':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_USERS));
+							break;
+						case 'G':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_GROUPS));
+							break;
+						case 'K':
+							sbuf_printf(dest, "%d", !pkg_list_empty(pkg, PKG_CONFLICTS));
+							break;
 					}
 					break;
 				case 'l':
@@ -106,6 +144,37 @@ format_str(struct pkg *pkg, struct sbuf *dest, const char *qstr, void *data)
 				case 'G':
 					sbuf_cat(dest, pkg_group_name((struct pkg_group *)data));
 					break;
+				case 'K':
+					sbuf_cat(dest, pkg_conflict_glob((struct pkg_conflict *)data));
+					break;
+				case '%':
+					sbuf_putc(dest, '%');
+					break;
+			}
+		} else  if (qstr[0] == '\\') {
+			qstr++;
+			switch (qstr[0]) {
+				case 'n':
+					sbuf_putc(dest, '\n');
+					break;
+				case 'a':
+					sbuf_putc(dest, '\a');
+					break;
+				case 'b':
+					sbuf_putc(dest, '\b');
+					break;
+				case 'f':
+					sbuf_putc(dest, '\f');
+					break;
+				case 'r':
+					sbuf_putc(dest, '\r');
+					break;
+				case '\\':
+					sbuf_putc(dest, '\\');
+					break;
+				case 't':
+					sbuf_putc(dest, '\t');
+					break;
 			}
 		} else {
 			sbuf_putc(dest, qstr[0]);
@@ -115,7 +184,7 @@ format_str(struct pkg *pkg, struct sbuf *dest, const char *qstr, void *data)
 	sbuf_finish(dest);
 }
 static void
-print_query(struct pkg *pkg, char *qstr, match_t query_flags)
+print_query(struct pkg *pkg, char *qstr, char multiline)
 {
 	struct sbuf *output = sbuf_new_auto();
 	struct pkg_dep *dep = NULL;
@@ -126,63 +195,79 @@ print_query(struct pkg *pkg, char *qstr, match_t query_flags)
 	struct pkg_license *lic = NULL;
 	struct pkg_user *user = NULL;
 	struct pkg_group *group = NULL;
+	struct pkg_conflict *conflict = NULL;
 
-	if (query_flags & PKG_LOAD_DEPS) {
-		while (pkg_deps(pkg, &dep) == EPKG_OK) {
+	switch (multiline) {
+		case 'd':
+			while (pkg_deps(pkg, &dep) == EPKG_OK) {
+				format_str(pkg, output, qstr, dep);
+				printf("%s\n", sbuf_data(output));
+				break;
+		}
+		case 'r':
+			while (pkg_rdeps(pkg, &dep) == EPKG_OK) {
+				format_str(pkg, output, qstr, dep);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'C':
+			while (pkg_categories(pkg, &cat) == EPKG_OK) {
+				format_str(pkg, output, qstr, cat);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'O':
+			while (pkg_options(pkg, &option) == EPKG_OK) {
+				format_str(pkg, output, qstr, option);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'F':
+			while (pkg_files(pkg, &file) == EPKG_OK) {
+				format_str(pkg, output, qstr, file);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'D':
+			while (pkg_dirs(pkg, &dir) == EPKG_OK) {
+				format_str(pkg, output, qstr, dir);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'L':
+			while (pkg_licenses(pkg, &lic) == EPKG_OK) {
+				format_str(pkg, output, qstr, lic);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'U':
+			while (pkg_users(pkg, &user) == EPKG_OK) {
+				format_str(pkg, output, qstr, user);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'G':
+			while (pkg_users(pkg, &user) == EPKG_OK) {
+				format_str(pkg, output, qstr, group);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		case 'K':
+			while (pkg_conflicts(pkg, &conflict) == EPKG_OK) {
+				format_str(pkg, output, qstr, conflict);
+				printf("%s\n", sbuf_data(output));
+			}
+			break;
+		default:
 			format_str(pkg, output, qstr, dep);
 			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_RDEPS) {
-		while (pkg_rdeps(pkg, &dep) == EPKG_OK) {
-			format_str(pkg, output, qstr, dep);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_CATEGORIES) {
-		while (pkg_categories(pkg, &cat) == EPKG_OK) {
-			format_str(pkg, output, qstr, cat);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_OPTIONS) {
-		while (pkg_options(pkg, &option) == EPKG_OK) {
-			format_str(pkg, output, qstr, option);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_FILES) {
-		while (pkg_files(pkg, &file) == EPKG_OK) {
-			format_str(pkg, output, qstr, file);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_DIRS) {
-		while (pkg_dirs(pkg, &dir) == EPKG_OK) {
-			format_str(pkg, output, qstr, dir);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_LICENSES) {
-		while (pkg_licenses(pkg, &lic) == EPKG_OK) {
-			format_str(pkg, output, qstr, lic);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_USERS) {
-		while (pkg_users(pkg, &user) == EPKG_OK) {
-			format_str(pkg, output, qstr, user);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else if (query_flags & PKG_LOAD_GROUPS) {
-		while (pkg_users(pkg, &user) == EPKG_OK) {
-			format_str(pkg, output, qstr, group);
-			printf("%s\n", sbuf_data(output));
-		}
-	} else {
-		format_str(pkg, output, qstr, dep);
-		printf("%s\n", sbuf_data(output));
+			break;
 	}
 	sbuf_delete(output);
 }
 static int
-analyse_query_string(char *qstr, int *flags)
+analyse_query_string(char *qstr, int *flags, char *multiline)
 {
-	char multiline = 0;
-
 	while (qstr[0] != '\0') {
 		if (qstr[0] == '%') {
 			qstr++;
@@ -193,11 +278,11 @@ analyse_query_string(char *qstr, int *flags)
 						fprintf(stderr, "Invalid query: %%d should be followed by: n, o or v\n");
 						return (EPKG_FATAL);
 					}
-					if (multiline != 0 && multiline != 'd') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%d' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'd') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%d' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'd';
+					*multiline = 'd';
 					*flags |= PKG_LOAD_DEPS;
 					break;
 				case 'r':
@@ -206,19 +291,19 @@ analyse_query_string(char *qstr, int *flags)
 						fprintf(stderr, "Invalid query: %%r should be followed by: n, o or v\n");
 						return (EPKG_FATAL);
 					}
-					if (multiline != 0 && multiline != 'r') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%r' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'r') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%r' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'r';
+					*multiline = 'r';
 					*flags |= PKG_LOAD_RDEPS;
 					break;
 				case 'C':
-					if (multiline != 0 && multiline != 'C') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%c' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'C') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%c' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'C';
+					*multiline = 'C';
 					*flags |= PKG_LOAD_CATEGORIES;
 					break;
 				case 'F':
@@ -227,19 +312,19 @@ analyse_query_string(char *qstr, int *flags)
 						fprintf(stderr, "Invalid query: %%F should be followed by: p or s\n");
 						return (EPKG_FATAL);
 					}
-					if (multiline != 0 && multiline != 'F') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%F' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'F') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%F' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'F';
+					*multiline = 'F';
 					*flags |= PKG_LOAD_FILES;
 					break;
 				case 'S':
-					if (multiline != 0 && multiline != 'S') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%S' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'S') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%S' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'S';
+					*multiline = 'S';
 					*flags |= PKG_LOAD_SCRIPTS;
 					break;
 				case 'O':
@@ -248,44 +333,52 @@ analyse_query_string(char *qstr, int *flags)
 						fprintf(stderr, "Invalid query: %%O should be followed by: k or v\n");
 						return (EPKG_FATAL);
 					}
-					if (multiline != 0 && multiline != 'O') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%O' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'O') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%O' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'O';
+					*multiline = 'O';
 					*flags |= PKG_LOAD_OPTIONS;
 					break;
 				case 'D':
-					if (multiline != 0 && multiline != 'D') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%D' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'D') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%D' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'D';
+					*multiline = 'D';
 					*flags |= PKG_LOAD_DIRS;
 					break;
 				case 'L':
-					if (multiline != 0 && multiline != 'L') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%L' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'L') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%L' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'M';
+					*multiline = 'M';
 					*flags |= PKG_LOAD_LICENSES;
 					break;
 				case 'U':
-					if (multiline != 0 && multiline != 'U') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%U' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'U') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%U' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'U';
+					*multiline = 'U';
 					*flags |= PKG_LOAD_USERS;
 					break;
 				case 'G':
-					if (multiline != 0 && multiline != 'G') {
-						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%G' at the same time\n", multiline);
+					if (*multiline != 0 && *multiline != 'G') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%G' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					multiline = 'G';
+					*multiline = 'G';
 					*flags |= PKG_LOAD_GROUPS;
+					break;
+				case 'K':
+					if (*multiline != 0 && *multiline != 'K') {
+						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%K' at the same time\n", *multiline);
+						return (EPKG_FATAL);
+					}
+					*multiline = 'K';
+					*flags |= PKG_LOAD_CONFLICTS;
 					break;
 				case 's':
 					qstr++;
@@ -293,6 +386,50 @@ analyse_query_string(char *qstr, int *flags)
 						fprintf(stderr, "Invalid query: %%s should be followed by: h or b\n");
 						return (EPKG_FATAL);
 					}
+					break;
+				case '?':
+					qstr++;
+					if (qstr[0] != 'd' && qstr[0] != 'r' && qstr[0] != 'C' &&
+							qstr[0] != 'F' && qstr[0] != '0' &&
+							qstr[0] != 'D' && qstr[0] != 'L' &&
+							qstr[0] != 'U' && qstr[0] != 'G' &&
+							qstr[0] != 'K' ) {
+						fprintf(stderr, "Invalid query: %%? should be followed by: d, r, C, F, O, D, L, U, G or K\n");
+						return (EPKG_FATAL);
+					}
+					switch (qstr[0]) {
+						case 'd':
+							*flags |= PKG_LOAD_DEPS;
+							break;
+						case 'r':
+							*flags |= PKG_LOAD_RDEPS;
+							break;
+						case 'C':
+							*flags |= PKG_LOAD_CATEGORIES;
+							break;
+						case 'F':
+							*flags |= PKG_LOAD_FILES;
+							break;
+						case 'O':
+							*flags |= PKG_LOAD_OPTIONS;
+							break;
+						case 'D':
+							*flags |= PKG_LOAD_DIRS;
+							break;
+						case 'L':
+							*flags |= PKG_LOAD_LICENSES;
+							break;
+						case 'U':
+							*flags |= PKG_LOAD_USERS;
+							break;
+						case 'G':
+							*flags |= PKG_LOAD_GROUPS;
+							break;
+						case 'K':
+							*flags |= PKG_LOAD_CONFLICTS;
+							break;
+					}
+
 					break;
 				case 'n':
 				case 'v':
@@ -302,6 +439,7 @@ analyse_query_string(char *qstr, int *flags)
 				case 'c':
 				case 'w':
 				case 'l':
+				case 'a':
 					/* this is ok */
 					break;
 				default:
@@ -335,6 +473,7 @@ exec_query(int argc, char **argv)
 	int ret = EPKG_OK;
 	int retcode = EXIT_SUCCESS;
 	int i;
+	char multiline = 0;
 
 	while ((ch = getopt(argc, argv, "agxX")) != -1) {
 		switch (ch) {
@@ -369,7 +508,7 @@ exec_query(int argc, char **argv)
 		return (EX_USAGE);
 	}
 
-	if (analyse_query_string(argv[0], &query_flags) != EPKG_OK)
+	if (analyse_query_string(argv[0], &query_flags, &multiline) != EPKG_OK)
 		return (EX_USAGE);
 
 	if (pkgdb_open(&db, PKGDB_DEFAULT) != EPKG_OK)
@@ -380,7 +519,7 @@ exec_query(int argc, char **argv)
 			return (EX_IOERR);
 
 		while ((ret = pkgdb_it_next(it, &pkg, query_flags)) == EPKG_OK)
-			print_query(pkg, argv[0], query_flags);
+			print_query(pkg, argv[0],  multiline);
 
 		if (ret != EPKG_END)
 			retcode = EX_SOFTWARE;
@@ -398,7 +537,7 @@ exec_query(int argc, char **argv)
 				return (EX_IOERR);
 
 			while ((ret = pkgdb_it_next(it, &pkg, query_flags)) == EPKG_OK)
-				print_query(pkg, argv[0], query_flags);
+				print_query(pkg, argv[0], multiline);
 
 			if (ret != EPKG_END) {
 				retcode = EX_SOFTWARE;

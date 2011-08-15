@@ -72,7 +72,7 @@ static struct column_int_mapping {
 };
 
 static int
-loadval(sqlite3 *db, struct pkg *pkg, const char *sql, int flags, int (*pkg_adddata)(struct pkg *pkg, const char *data), void (*pkg_freedata)(struct pkg *pkg))
+loadval(sqlite3 *db, struct pkg *pkg, const char *sql, int flags, int (*pkg_adddata)(struct pkg *pkg, const char *data), int list)
 {
 	sqlite3_stmt *stmt;
 	int ret;
@@ -94,7 +94,8 @@ loadval(sqlite3 *db, struct pkg *pkg, const char *sql, int flags, int (*pkg_addd
 	sqlite3_finalize(stmt);
 
 	if (ret != SQLITE_DONE) {
-		pkg_freedata(pkg);
+		if (list != -1)
+			pkg_list_empty(pkg, list);
 		ERROR_SQLITE(db);
 		return (EPKG_FATAL);
 	}
@@ -691,10 +692,6 @@ pkgdb_it_next(struct pkgdb_it *it, struct pkg **pkg_p, int flags)
 
 		populate_pkg(it->stmt, pkg);
 
-		/* load only for PKG_INSTALLED */
-		if (it->type != PKG_INSTALLED)
-			return (EPKG_OK);
-
 		if (flags & PKG_LOAD_DEPS)
 			if ((ret = pkgdb_loaddeps(it->db, pkg)) != EPKG_OK)
 				return (ret);
@@ -826,134 +823,6 @@ pkgdb_query(struct pkgdb *db, const char *pattern, match_t match)
 	return (pkgdb_it_new(db, stmt, PKG_INSTALLED));
 }
 
-struct pkg *
-pkgdb_query_remote(struct pkgdb *db, const char *pattern)
-{
-	sqlite3_stmt *stmt = NULL;
-	sqlite3_stmt *stmt_deps = NULL;
-	struct pkg *pkg = NULL;
-	struct sbuf *sql = NULL;
-	struct pkgdb_it *it = NULL;
-	int ret, multi_repos = 0;
-	char  tmpbuf[BUFSIZ];
-	const char *dbname = NULL;
-	const char *basesql = ""
-		"SELECT id AS rowid, origin, name, version, comment, desc, "
-			"arch, osversion, maintainer, www, pkgsize, "
-			"flatsize AS newflatsize, cksum, path AS repopath ";
-	const char *multireposql = ""
-		"SELECT id, origin, name, version, comment, desc, "
-			"arch, osversion, maintainer, www, pkgsize, "
-			"flatsize, cksum, path, '%s' AS dbname "
-		"FROM '%s'.packages "
-		"WHERE origin = ?1 ";
-	const char *sql_deps = ""
-		"SELECT d.name, d.origin, d.version "
-		"FROM '%s'.deps AS d "
-		"WHERE d.package_id = ?1 "
-			"AND NOT EXISTS (SELECT 1 FROM main.packages AS p "
-			"WHERE p.origin = d.origin)";
-
-	assert(db != NULL && db->type == PKGDB_REMOTE);
-
-	sql = sbuf_new_auto();
-	sbuf_cat(sql, basesql);
-
-	if ((strcmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) && \
-			(pkg_config("PACKAGESITE") == NULL)) {
-		/*
-		 * Working on multiple remote repositories
-		 */
-
-		multi_repos = 1;
-
-		/* add the dbname column to the SELECT */
-		sbuf_cat(sql, ", dbname FROM ");
-
-		if ((it = pkgdb_repos_new(db)) == NULL) {
-			pkg_emit_error("%s", "cannot get the attached databases");
-			return (NULL);
-		}
-
-		/* get the first repository entry (attached database) */
-		if ((dbname = pkgdb_repos_next(it)) != NULL) {
-			sbuf_cat(sql, "(");
-			snprintf(tmpbuf, sizeof(tmpbuf), multireposql, dbname, dbname);
-			sbuf_cat(sql, tmpbuf);
-		} else {
-			/* there are no remote databases attached */
-			sbuf_finish(sql);
-			sbuf_delete(sql);
-			pkgdb_it_free(it);
-			return (NULL);
-		}
-
-		while ((dbname = pkgdb_repos_next(it)) != NULL) {
-			sbuf_cat(sql, " UNION ");
-			snprintf(tmpbuf, sizeof(tmpbuf), multireposql, dbname, dbname);
-			sbuf_cat(sql, tmpbuf);
-		}
-
-		sbuf_cat(sql, ");");
-		sbuf_finish(sql);
-		pkgdb_it_free(it);
-	} else {
-		/* 
-		 * Working on a single remote repository
-		 */
-
-		sbuf_cat(sql, "FROM remote.packages WHERE origin = ?1;");
-		sbuf_finish(sql);
-	}
-
-	if (sqlite3_prepare_v2(db->sqlite, sbuf_get(sql), -1, &stmt, NULL) != SQLITE_OK) {
-		ERROR_SQLITE(db->sqlite);
-		return (NULL);
-	}
-
-	sbuf_delete(sql);
-
-	sqlite3_bind_text(stmt, 1, pattern, -1, SQLITE_STATIC);
-
-	ret = sqlite3_step(stmt);
-	if (ret != SQLITE_ROW) {
-		if (ret != SQLITE_DONE)
-			ERROR_SQLITE(db->sqlite);
-		goto cleanup;
-	}
-
-	pkg_new(&pkg, PKG_REMOTE);
-
-	populate_pkg(stmt, pkg);
-
-	if (multi_repos == 1) {
-		/* we do the search of deps only in the repository of pkg */
-		snprintf(tmpbuf, sizeof(tmpbuf), sql_deps, pkg_get(pkg, PKG_REPONAME));
-	} else {
-		/* the search of deps is only in the 'remote' database (PACKAGESITE is set) */
-		snprintf(tmpbuf, sizeof(tmpbuf), sql_deps, "remote");
-	}
-
-	if (sqlite3_prepare_v2(db->sqlite, tmpbuf, -1, &stmt_deps, NULL) != SQLITE_OK) {
-		ERROR_SQLITE(db->sqlite);
-		return (NULL);
-	}
-
-	sqlite3_bind_int64(stmt_deps, 1, pkg->rowid);
-	while ((ret = sqlite3_step(stmt_deps)) == SQLITE_ROW) {
-		pkg_adddep(pkg, sqlite3_column_text(stmt_deps, 0),
-				   sqlite3_column_text(stmt_deps, 1),
-				   sqlite3_column_text(stmt_deps, 2));
-	}
-
-	cleanup:
-	if (stmt != NULL)
-		sqlite3_finalize(stmt);
-	if (stmt_deps != NULL)
-		sqlite3_finalize(stmt_deps);
-	return (pkg);
-}
-
 struct pkgdb_it *
 pkgdb_query_which(struct pkgdb *db, const char *path)
 {
@@ -1015,13 +884,18 @@ pkgdb_loaddeps(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt *stmt;
 	int ret;
-	const char sql[] = ""
-	"SELECT p.name, p.origin, p.version "
-	"FROM packages AS p, deps AS d "
-	"WHERE p.origin = d.origin "
-		"AND d.package_id = ?1;";
-
-	assert(pkg->type == PKG_INSTALLED);
+	const char *sql;
+	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
+		sql = ""
+			"SELECT d.name, d.origin, d.version "
+			"FROM remote.deps AS d "
+			"WHERE d.package_id = ?1;";
+	} else {
+		sql = ""
+			"SELECT d.name, d.origin, d.version "
+			"FROM main.deps AS d "
+			"WHERE d.package_id = ?1;";
+	}
 
 	if (pkg->flags & PKG_LOAD_DEPS)
 		return (EPKG_OK);
@@ -1040,7 +914,7 @@ pkgdb_loaddeps(struct pkgdb *db, struct pkg *pkg)
 	sqlite3_finalize(stmt);
 
 	if (ret != SQLITE_DONE) {
-		pkg_freedeps(pkg);
+		pkg_list_empty(pkg, PKG_DEPS);
 		ERROR_SQLITE(db->sqlite);
 		return (EPKG_FATAL);
 	}
@@ -1079,7 +953,7 @@ pkgdb_loadrdeps(struct pkgdb *db, struct pkg *pkg)
 	sqlite3_finalize(stmt);
 
 	if (ret != SQLITE_DONE) {
-		pkg_freerdeps(pkg);
+		pkg_list_free(pkg, PKG_RDEPS);
 		ERROR_SQLITE(db->sqlite);
 		return (EPKG_FATAL);
 	}
@@ -1117,7 +991,7 @@ pkgdb_loadfiles(struct pkgdb *db, struct pkg *pkg)
 	sqlite3_finalize(stmt);
 
 	if (ret != SQLITE_DONE) {
-		pkg_freefiles(pkg);
+		pkg_list_free(pkg, PKG_FILES);
 		ERROR_SQLITE(db->sqlite);
 		return (EPKG_FATAL);
 	}
@@ -1136,33 +1010,53 @@ pkgdb_loaddirs(struct pkgdb *db, struct pkg *pkg)
 		"AND directory_id = directories.id "
 		"ORDER by path DESC";
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_DIRS, pkg_adddir, pkg_freedirs));
+	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_DIRS, pkg_adddir, PKG_DIRS));
 }
 
 int
 pkgdb_loadlicense(struct pkgdb *db, struct pkg *pkg)
 {
-	const char sql[] = ""
-		"SELECT name "
-		"FROM pkg_licenses, licenses "
-		"WHERE package_id = ?1 "
-		"AND license_id = licenses.id "
-		"ORDER by name DESC";
+	const char *sql;
+	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
+		sql = ""
+			"SELECT name "
+			"FROM remote.pkg_licenses, remote.licenses AS l "
+			"WHERE package_id = ?1 "
+			"AND license_id = l.id "
+			"ORDER by name DESC";
+	} else {
+		sql = ""
+			"SELECT name "
+			"FROM main.pkg_licenses, main.licenses AS l "
+			"WHERE package_id = ?1 "
+			"AND license_id = l.id "
+			"ORDER by name DESC";
+	}
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_LICENSES, pkg_addlicense, pkg_freelicenses));
+	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_LICENSES, pkg_addlicense, PKG_LICENSES));
 }
 
 int
 pkgdb_loadcategory(struct pkgdb *db, struct pkg *pkg)
 {
-	const char sql[] = ""
-		"SELECT categories.name "
-		"FROM pkg_categories, categories "
-		"WHERE package_id = ?1 "
-		"AND category_id = categories.id "
-		"ORDER by name DESC";
+	const char *sql;
+	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
+		sql = ""
+			"SELECT name "
+			"FROM remote.pkg_categories, remote.categories AS c "
+			"WHERE package_id = ?1 "
+			"AND category_id = c.id "
+			"ORDER by name DESC";
+	} else {
+		sql = ""
+			"SELECT name "
+			"FROM main.pkg_categories, main.categories AS c "
+			"WHERE package_id = ?1 "
+			"AND category_id = c.id "
+			"ORDER by name DESC";
+	}
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_CATEGORIES, pkg_addcategory, pkg_freecategories));
+	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_CATEGORIES, pkg_addcategory, PKG_CATEGORIES));
 }
 
 int
@@ -1175,7 +1069,7 @@ pkgdb_loaduser(struct pkgdb *db, struct pkg *pkg)
 		"AND user_id = users.id "
 		"ORDER by name DESC";
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_USERS, pkg_adduser, pkg_freeusers));
+	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_USERS, pkg_adduser, PKG_USERS));
 }
 
 int
@@ -1188,7 +1082,7 @@ pkgdb_loadgroup(struct pkgdb *db, struct pkg *pkg)
 		"AND group_id = groups.id "
 		"ORDER by name DESC";
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_GROUPS, pkg_addgroup, pkg_freegroups));
+	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_GROUPS, pkg_addgroup, PKG_GROUPS));
 }
 
 int
@@ -1201,7 +1095,7 @@ pkgdb_loadconflicts(struct pkgdb *db, struct pkg *pkg)
 
 	assert(pkg->type == PKG_INSTALLED);
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_CONFLICTS, pkg_addconflict, pkg_freeconflicts));
+	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_CONFLICTS, pkg_addconflict, PKG_CONFLICTS));
 }
 
 int
@@ -1232,7 +1126,7 @@ pkgdb_loadscripts(struct pkgdb *db, struct pkg *pkg)
 	sqlite3_finalize(stmt);
 
 	if (ret != SQLITE_DONE) {
-		pkg_freescripts(pkg);
+		pkg_list_free(pkg, PKG_SCRIPTS);
 		ERROR_SQLITE(db->sqlite);
 		return (EPKG_FATAL);
 	}
@@ -1246,12 +1140,18 @@ pkgdb_loadoptions(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt *stmt;
 	int ret;
-	const char sql[] = ""
+	const char *sql;
+	if (pkg->type == PKG_UPGRADE || pkg->type == PKG_REMOTE) {
+		sql = ""
 		"SELECT option, value "
-		"FROM options "
+		"FROM remote.options "
 		"WHERE package_id = ?1";
-
-	assert(pkg->type == PKG_INSTALLED);
+	} else {
+		sql = ""
+		"SELECT option, value "
+		"FROM main.options "
+		"WHERE package_id = ?1";
+	}
 
 	if (pkg->flags & PKG_LOAD_OPTIONS)
 		return (EPKG_OK);
@@ -1270,7 +1170,7 @@ pkgdb_loadoptions(struct pkgdb *db, struct pkg *pkg)
 	sqlite3_finalize(stmt);
 
 	if (ret != SQLITE_DONE) {
-		pkg_freeoptions(pkg);
+		pkg_list_free(pkg, PKG_OPTIONS);
 		ERROR_SQLITE(db->sqlite);
 		return (EPKG_FATAL);
 	}
@@ -1290,7 +1190,7 @@ pkgdb_loadmtree(struct pkgdb *db, struct pkg *pkg)
 
 	assert(pkg->type == PKG_INSTALLED);
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_MTREE, pkg_setmtree, NULL));
+	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_MTREE, pkg_setmtree, -1));
 }
 
 int
@@ -1916,11 +1816,11 @@ pkgdb_query_upgrades(struct pkgdb *db)
 		"SELECT l.id AS rowid, l.origin AS origin, l.name AS name, l.version AS version, l.comment AS comment, l.desc AS desc, "
 		"l.message AS message, l.arch AS arch, l.osversion AS osversion, l.maintainer AS maintainer, "
 		"l.www AS www, l.prefix AS prefix, l.flatsize AS flatsize, r.version AS newversion, r.flatsize AS newflatsize, "
-		"r.pkgsize AS pkgsize, r.path AS repopath "
+		"r.pkgsize AS pkgsize, r.cksum AS cksum, r.path AS repopath "
 		"FROM main.packages AS l, "
 		"remote.packages AS r "
 		"WHERE l.origin = r.origin "
-		"AND PKGLT(l.version, r.version)";
+		"AND (PKGLT(l.version, r.version) OR (l.name != r.name))";
 
 	if (sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL) != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
@@ -2037,12 +1937,14 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	sqlite3_stmt *stmt = NULL;
 	struct sbuf *sql = NULL;
 	struct pkgdb_it *it = NULL;
-	const char *basesql      = "SELECT origin, name, version, comment, "
-					"desc, arch, osversion, maintainer, www, "
-					"flatsize AS newflatsize, pkgsize, cksum, path AS repopath ";
-	const char *multireposql = "SELECT origin, name, version, comment, "
-					"desc, arch, osversion, maintainer, www, "
-					"flatsize, pkgsize, cksum, path, '%s' AS dbname "
+	const char *basesql      = "SELECT id AS rowid, origin, name, version, comment, "
+					"prefix, desc, arch, osversion, maintainer, www, "
+					"licenselogic, flatsize AS newflatsize, pkgsize, "
+					"cksum, path AS repopath ";
+	const char *multireposql = "SELECT id, origin, name, version, comment, "
+					"prefix, desc, arch, osversion, maintainer, www, "
+					"licenselogic, flatsize, pkgsize, "
+					"cksum, path, '%s' AS dbname "
 					"FROM '%s'.packages WHERE ";
 
 	assert(pattern != NULL && pattern[0] != '\0');

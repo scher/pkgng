@@ -1,6 +1,6 @@
 .include <bsd.own.mk>
 
-LIB=		pkgng
+LIB=		pkg
 INCS=		pkg.h
 WARNS=		6
 SHLIBDIR?=	/usr/lib
@@ -43,6 +43,7 @@ LDADD+=		-L${.CURDIR}/../external/sqlite \
 		-lpthread
 
 DEBUG_FLAGS+=  -g -O0
+STRIP=
 .if defined(PROFILE_BUILD)
 DEBUG_FLAGS+=	-pg
 .endif

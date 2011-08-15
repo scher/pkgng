@@ -12,23 +12,27 @@
 void
 usage_search(void)
 {
-	fprintf(stderr, "usage, pkg search [-gxXcd] pattern\n");
+	fprintf(stderr, "usage: pkg search [-gxXcd] pattern\n\n");
 	fprintf(stderr, "For more information see 'pkg help search'.\n");
 }
 
 int
 exec_search(int argc, char **argv)
 {
-	char *pattern;
+	const char *pattern = NULL;
 	match_t match = MATCH_EXACT;
 	int  retcode = EPKG_OK;
 	pkgdb_field field = FIELD_NAME;
+	char size[7];
 	int ch;
 	int multi_repos = 0;
-	char size[7];
+	int flags = PKG_LOAD_BASIC|PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES|PKG_LOAD_OPTIONS;
 	struct pkgdb *db = NULL;
 	struct pkgdb_it *it = NULL;
 	struct pkg *pkg = NULL;
+	struct pkg_category *cat = NULL;
+	struct pkg_license *lic = NULL;
+	struct pkg_option *opt = NULL;
 
 	while ((ch = getopt(argc, argv, "gxXcd")) != -1) {
 		switch (ch) {
@@ -74,17 +78,44 @@ exec_search(int argc, char **argv)
 	if (((strcmp(pkg_config("PKG_MULTIREPOS"), "true") == 0)) && (pkg_config("PACKAGESITE") == NULL))
 		multi_repos = 1;
 
-	while ((retcode = pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC)) == EPKG_OK) {
+	while ((retcode = pkgdb_it_next(it, &pkg, flags)) == EPKG_OK) {
 		printf("Name       : %s\n", pkg_get(pkg, PKG_NAME));
 		printf("Version    : %s\n", pkg_get(pkg, PKG_VERSION));
 		printf("Origin     : %s\n", pkg_get(pkg, PKG_ORIGIN));
+		printf("Prefix     : %s\n", pkg_get(pkg, PKG_PREFIX));
 		printf("Arch:      : %s\n", pkg_get(pkg, PKG_ARCH));
+
+		if (multi_repos == 1)
+			printf("Repository : %s [%s]\n", pkg_get(pkg, PKG_REPONAME), pkg_get(pkg, PKG_REPOURL));
+
+		if (!pkg_list_empty(pkg, PKG_CATEGORIES)) {
+			printf("Categories :");
+			while (pkg_categories(pkg, &cat) == EPKG_OK)
+				printf(" %s", pkg_category_name(cat));
+			printf("\n");
+		}
+
+		if (!pkg_list_empty(pkg, PKG_LICENSES)) {
+			printf("Licenses   :");
+			while (pkg_licenses(pkg, &lic) == EPKG_OK) {
+				printf(" %s", pkg_license_name(lic));
+				if (pkg_licenselogic(pkg) != 1)
+					printf(" %c", pkg_licenselogic(pkg));
+				else
+					printf(" ");
+			}
+			printf("\b \n");
+		}
+
 		printf("Maintainer : %s\n", pkg_get(pkg, PKG_MAINTAINER));
 		printf("WWW        : %s\n", pkg_get(pkg, PKG_WWW));
 		printf("Comment    : %s\n", pkg_get(pkg, PKG_COMMENT));
 
-		if (multi_repos == 1)
-			printf("Repository : %s [%s]\n", pkg_get(pkg, PKG_REPONAME), pkg_get(pkg, PKG_REPOURL));
+		if (!pkg_list_empty(pkg, PKG_OPTIONS)) {
+			printf("Options    :\n");
+			while (pkg_options(pkg, &opt) == EPKG_OK)
+				printf("\t%s: %s\n", pkg_option_opt(opt), pkg_option_value(opt));
+		}
 
 		humanize_number(size, sizeof(size), pkg_new_flatsize(pkg), "B", HN_AUTOSCALE, 0);
 		printf("Flat size  : %s\n", size);
