@@ -100,9 +100,6 @@ pkg_jobs_install(struct pkg_jobs *j)
 	cachedir = pkg_config("PKG_CACHEDIR");
 	p = NULL;
 	while (pkg_jobs(j, &p) == EPKG_OK) {
-		/* no need to reinstall package already installed */
-		if (p->type == PKG_INSTALLED)
-			continue;
 		snprintf(path, sizeof(path), "%s/%s", cachedir,
 				 pkg_get(p, PKG_REPOPATH));
 
@@ -133,10 +130,6 @@ pkg_jobs_upgrade(struct pkg_jobs *j)
 	cachedir = pkg_config("PKG_CACHEDIR");
 	p = NULL;
 	while (pkg_jobs(j, &p) == EPKG_OK) {
-		/* no need to reinstall package already installed */
-		if (p->type == PKG_INSTALLED)
-			continue;
-
 		snprintf(path, sizeof(path), "%s/%s", cachedir,
 			 pkg_get(p, PKG_REPOPATH));
 
@@ -205,7 +198,11 @@ get_node(struct pkg_jobs *j, const char *name, int create)
 	if (create == 0)
 		return (NULL);
 
-	n = calloc(1, sizeof(struct pkg_jobs_node));
+	if ((n = calloc(1, sizeof(struct pkg_jobs_node))) == NULL) {
+		pkg_emit_errno("calloc", "pkg_jobs_node");
+		return (NULL);
+	}
+
 	LIST_INSERT_HEAD(&j->nodes, n, entries);
 	return (n);
 }
@@ -220,8 +217,11 @@ add_parent(struct pkg_jobs_node *n, struct pkg_jobs_node *p)
 				n->parents_cap = 5;
 			else
 				n->parents_cap *= 2;
-			n->parents = realloc(n->parents, n->parents_cap *
-								  sizeof(struct pkg_jobs_node));
+			if ((n->parents = reallocf(n->parents,
+					n->parents_cap * sizeof(struct pkg_jobs_node))) == NULL) {
+					pkg_emit_errno("realloc", "pkg_jobs_node");
+					return;
+			}
 		}
 		n->parents[n->parents_len] = p;
 		n->parents_len++;
@@ -309,7 +309,10 @@ pkg_jobs_resolv(struct pkg_jobs *j)
 
 		n = get_node(j, pkg_get(p, PKG_ORIGIN), 1);
 
-		n->pkg = p;
+		if (n->pkg == NULL)
+			n->pkg = p;
+		else
+			pkg_free(p);
 	}
 
 	/* Add dependencies into nodes */
