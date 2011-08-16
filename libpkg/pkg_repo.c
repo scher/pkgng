@@ -85,8 +85,7 @@ pkg_repo_fetch(struct pkg *pkg)
 	if ((retcode = mkdirs(path)) != 0)
 		goto cleanup;
 
-	if ((strcmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) && \
-			((packagesite = pkg_config("PACKAGESITE")) == NULL)) {
+	if ((packagesite = pkg_config("PACKAGESITE")) == NULL) {
 		/* 
 		 * PACKAGESITE is not set
 		 * Get the URL from the package itself
