@@ -1937,7 +1937,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 					"prefix, desc, arch, osversion, maintainer, www, "
 					"licenselogic, flatsize, pkgsize, "
 					"cksum, path, '%s' AS dbname "
-					"FROM '%s'.packages WHERE ";
+					"FROM '%s'.packages ";
 
 	assert(pattern != NULL && pattern[0] != '\0');
 
@@ -1968,7 +1968,6 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 			sbuf_cat(sql, "(");
 			snprintf(tmpbuf, sizeof(tmpbuf), multireposql, dbname, dbname);
 			sbuf_cat(sql, tmpbuf);
-			pkgdb_rquery_build_search_query(sql, match, field);
 		} else {
 			/* there are no remote databases attached */
 			sbuf_finish(sql);
@@ -1978,13 +1977,14 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 		}
 
 		while ((dbname = pkgdb_repos_next(it)) != NULL) {
-			sbuf_cat(sql, " UNION ");
+			sbuf_cat(sql, " UNION ALL ");
 			snprintf(tmpbuf, sizeof(tmpbuf), multireposql, dbname, dbname);
 			sbuf_cat(sql, tmpbuf);
-			pkgdb_rquery_build_search_query(sql, match, field);
 		}
 
-		sbuf_cat(sql, ");");
+		/* close the UNIONs and build the search query */
+		sbuf_cat(sql, ") WHERE ");
+		pkgdb_rquery_build_search_query(sql, match, field);
 		sbuf_finish(sql);
 		pkgdb_it_free(it);
 	} else {
