@@ -124,13 +124,13 @@ exec_update(int argc, char **argv)
 
 		retcode = update_from_remote_repo("repo", url);
 	} else {
-		if (pkg_repos_conf_new(&repos) != EPKG_OK)
+		if (pkg_repos_new(&repos) != EPKG_OK)
 			return (EPKG_FATAL);
 
-		if (pkg_repos_conf_load(repos) != EPKG_OK)
+		if (pkg_repos_load(repos) != EPKG_OK)
 			return (EPKG_FATAL);
 
-		while (pkg_repos_conf_next(repos, &re) == EPKG_OK) {
+		while (pkg_repos_next(repos, &re) == EPKG_OK) {
 			packagesite = pkg_repos_get_url(re);
 
 			if (packagesite[strlen(packagesite) - 1] == '/')
@@ -141,7 +141,7 @@ exec_update(int argc, char **argv)
 			retcode = update_from_remote_repo(pkg_repos_get_name(re), url);
 		}
 
-		pkg_repos_conf_free(repos);
+		pkg_repos_free(repos);
 	}
 
 	return (retcode);

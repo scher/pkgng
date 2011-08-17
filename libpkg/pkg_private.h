@@ -119,9 +119,11 @@ struct pkg_repos {
 		struct sbuf *name;
 		struct sbuf *url;
 		unsigned int line;
+		unsigned int switched :1;
 		STAILQ_ENTRY(pkg_repos_entry) entries;
 	} re;
 
+	unsigned int switchable :1;
 	STAILQ_HEAD(repos, pkg_repos_entry) nodes;
 };
 

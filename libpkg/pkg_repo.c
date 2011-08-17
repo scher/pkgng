@@ -45,7 +45,7 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
          */
 
 	repo_name = pkg_repos_get_name(re);
-        while (pkg_repos_conf_next(repos, &next) == EPKG_OK)
+        while (pkg_repos_next(repos, &next) == EPKG_OK)
                 if ((strcmp(repo_name, pkg_repos_get_name(next)) == 0) || \
                     (strcmp(repo_name, "repo") == 0) || \
 		    (strcmp(repo_name, "main") == 0) || \
@@ -121,7 +121,7 @@ pkg_repo_fetch(struct pkg *pkg)
 }
 
 int
-pkg_repos_conf_new(struct pkg_repos **repos)
+pkg_repos_new(struct pkg_repos **repos)
 {
         if ((*repos = calloc(1, sizeof(struct pkg_repos))) == NULL) {
                 pkg_emit_errno("calloc", "pkg_repos");
@@ -134,7 +134,7 @@ pkg_repos_conf_new(struct pkg_repos **repos)
 }
 
 int
-pkg_repos_conf_load(struct pkg_repos *repos)
+pkg_repos_load(struct pkg_repos *repos)
 {
         FILE *fp = NULL;
         char *repo_buf[MAXPATHLEN];
@@ -181,7 +181,7 @@ pkg_repos_conf_load(struct pkg_repos *repos)
 		sbuf_set(&re->url, repo_buf[1]);
                 re->line = line;
 
-                pkg_repos_conf_add(repos, re);
+                pkg_repos_add(repos, re);
         }
 
         fclose(fp);
@@ -190,7 +190,7 @@ pkg_repos_conf_load(struct pkg_repos *repos)
 }
 
 int
-pkg_repos_conf_add(struct pkg_repos *repos, struct pkg_repos_entry *re)
+pkg_repos_add(struct pkg_repos *repos, struct pkg_repos_entry *re)
 {
         assert(repos != NULL && re != NULL);
 
@@ -211,7 +211,7 @@ pkg_repos_conf_add(struct pkg_repos *repos, struct pkg_repos_entry *re)
 }
 
 int
-pkg_repos_conf_next(struct pkg_repos *repos, struct pkg_repos_entry **re)
+pkg_repos_next(struct pkg_repos *repos, struct pkg_repos_entry **re)
 {
         assert(repos != NULL);
 
@@ -222,8 +222,46 @@ pkg_repos_conf_next(struct pkg_repos *repos, struct pkg_repos_entry **re)
 
         if (*re == NULL)
                 return (EPKG_END);
-        else
-                return (EPKG_OK);
+
+	 /* Check if we have switched to a repo */
+	if (repos->switchable == 1) {
+		if ((*re)->switched == 1)
+			return (EPKG_OK);
+		else
+			return(pkg_repos_next(repos, re));
+	}
+
+	return (EPKG_OK);
+}
+
+int
+pkg_repos_switch(struct pkg_repos *repos, const char *reponame)
+{
+	struct pkg_repos_entry *re = NULL;
+
+	pkg_repos_switch_reset(repos);
+
+	while (pkg_repos_next(repos, &re) == EPKG_OK)
+		if (strcmp(reponame, pkg_repos_get_name(re)) == 0) {
+			repos->switchable = 1;
+			re->switched = 1;
+			return (EPKG_OK);
+		}
+
+	return (EPKG_FATAL);
+}
+
+int
+pkg_repos_switch_reset(struct pkg_repos *repos)
+{
+	struct pkg_repos_entry *re = NULL;
+
+	repos->switchable = 0;
+
+	while (pkg_repos_next(repos, &re) == EPKG_OK)
+		re->switched = 0;
+
+	return (EPKG_OK);
 }
 
 const char *
@@ -251,7 +289,7 @@ pkg_repos_get_line(struct pkg_repos_entry *re)
 }
 
 void
-pkg_repos_conf_free(struct pkg_repos *repos)
+pkg_repos_free(struct pkg_repos *repos)
 {
         struct pkg_repos_entry *re1, *re2;
 

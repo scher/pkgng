@@ -742,42 +742,58 @@ int ports_parse_plist(struct pkg *, char *);
 /**
  * Creates a new repository object
  * This function is used for creating a repository
- * object that can later be used by pkg_repos_conf_load()
- * for loading the repositories from file and pkg_repos_conf_next()
+ * object that can later be used by pkg_repos_load()
+ * for loading the repositories from file and pkg_repos_next()
  * for iterating over the repositories tail.
  * @return EPKG_OK on success and EPKG_FATAL on error
  */
-int pkg_repos_conf_new(struct pkg_repos **repos);
+int pkg_repos_new(struct pkg_repos **repos);
 
 /**
  * Loads the remote repositories from file
- * @param repos A valid repository object as received from pkg_repos_conf_new()
+ * @param repos A valid repository object as received from pkg_repos_new()
  * @return EPKG_OK on success and EPKG_FATAL on error
  */
-int pkg_repos_conf_load(struct pkg_repos *repos);
+int pkg_repos_load(struct pkg_repos *repos);
 
 /**
  * Adds a repository entry found from the repositories file to the tail
- * @param repos A valid repository object as returned by pkg_repos_conf_new()
+ * @param repos A valid repository object as returned by pkg_repos_new()
  * @param re A valid repository entry object
  * @return EPKG_OK on success and EPKG_FATAL on error
  */
-int pkg_repos_conf_add(struct pkg_repos *repos, struct pkg_repos_entry *re);
+int pkg_repos_add(struct pkg_repos *repos, struct pkg_repos_entry *re);
 
 /**
  * Get the next repository from the configuration file
- * @param repos A valid repository object as returned by pkg_repos_conf_new()
+ * @param repos A valid repository object as returned by pkg_repos_new()
  * @param re A pointer to a repository entry to save the result. Must be set to
  * NULL for the first repository entry
  * @return EPKG_OK on success and EPKG_END if end of tail is reached
  */
-int pkg_repos_conf_next(struct pkg_repos *repos, struct pkg_repos_entry **re);
+int pkg_repos_next(struct pkg_repos *repos, struct pkg_repos_entry **re);
+
+/**
+ * Switches to a single repository while running in multi-repos mode
+ * @param repos A valid repository object as returned by pkg_repos_new()
+ * @param reponame The name of the repository to switch to
+ * @return EPKG_OK if switching to reponame was successful and EPKG_FATAL
+ * in case of error, e.g. repository does not exists
+ */
+int pkg_repos_switch(struct pkg_repos *repos, const char *reponame);
+
+/**
+ * Switches back to multi-repos mode and resets any switchable repos
+ * @param repos A valid repository object as returned by pkg_repos_new()
+ * @return EPKG_OK on success
+ */
+int pkg_repos_switch_reset(struct pkg_repos *repos);
 
 /**
  * Frees the memory used by the repository objects
- * @param repos A valid repository object as returned by pkg_repos_conf_new()
+ * @param repos A valid repository object as returned by pkg_repos_new()
  */
-void pkg_repos_conf_free(struct pkg_repos *repos);
+void pkg_repos_free(struct pkg_repos *repos);
 
 /**
  * Returns the name associated with a repository entry
