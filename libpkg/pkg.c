@@ -85,8 +85,7 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 	pkg->flatsize = 0;
 	pkg->new_flatsize = 0;
 	pkg->new_pkgsize = 0;
-	pkg->flags = 0;
-	pkg->rowid = 0;
+	pkg->automatic = false;
 	pkg->licenselogic = 1;
 
 	pkg_list_free(pkg, PKG_LICENSES);
@@ -101,6 +100,7 @@ pkg_reset(struct pkg *pkg, pkg_t type)
 	pkg_list_free(pkg, PKG_USERS);
 	pkg_list_free(pkg, PKG_GROUPS);
 
+	pkg->rowid = 0;
 	pkg->type = type;
 }
 
@@ -731,7 +731,7 @@ pkg_addoption(struct pkg *pkg, const char *key, const char *value)
 }
 
 int
-pkg_list_empty(struct pkg *pkg, pkg_list list) {
+pkg_list_isempty(struct pkg *pkg, pkg_list list) {
 	switch (list) {
 		case PKG_DEPS:
 			return (STAILQ_EMPTY(&pkg->deps));
