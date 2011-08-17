@@ -238,7 +238,7 @@ add_dep(struct pkg_jobs *j, struct pkg_jobs_node *n)
 		ndep = get_node(j, pkg_dep_origin(dep), 1);
 		if (ndep->pkg == NULL) {
 			/* get it from remote */
-			if ((it = pkgdb_rquery(j->db, pkg_dep_origin(dep), MATCH_EXACT, FIELD_ORIGIN)) == NULL) {
+			if ((it = pkgdb_rquery(j->db, pkg_dep_origin(dep), MATCH_EXACT, FIELD_ORIGIN, pkg_get(n->pkg, PKG_REPONAME))) == NULL) {
 				pkg_emit_missing_dep(n->pkg, dep);
 			} else {
 				if (pkgdb_it_next(it, &ndep->pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS) == EPKG_OK) {

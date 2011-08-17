@@ -1946,7 +1946,7 @@ pkgdb_rquery_build_search_query(struct sbuf *sql, match_t match, unsigned int fi
 }
 
 struct pkgdb_it *
-pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int field)
+pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int field, const char *reponame)
 {
 	const char *dbname = NULL;
 	char tmpbuf[BUFSIZ];
@@ -1988,6 +1988,12 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 			pkg_emit_error("pkgdb_rquery(): %s", "cannot get the attached databases");
 			return (NULL);
 		}
+
+		if (reponame != NULL)
+			if (pkg_repos_switch(repos, reponame) != EPKG_OK) {
+				pkg_emit_error("pkgdb_rquery(): %s", "cannot switch to repository");
+				return (NULL);
+			}
 
 		/* get the first repository entry */
 		if (pkg_repos_next(repos, &re) == EPKG_OK) {

@@ -16,7 +16,7 @@
 void
 usage_install(void)
 {
-	fprintf(stderr, "usage: pkg install [-ygxXf] <pkg-name> <...>\n\n");
+	fprintf(stderr, "usage: pkg install [-r reponame] [-ygxXf] <pkg-name> <...>\n\n");
 	fprintf(stderr, "For more information see 'pkg help install'.\n");
 }
 
@@ -27,11 +27,12 @@ exec_install(int argc, char **argv)
 	struct pkgdb_it *it;
 	struct pkgdb *db = NULL;
 	struct pkg_jobs *jobs = NULL;
+	const char *reponame = NULL;
 	int retcode = 1;
 	int i, ch, yes = 0;
 	match_t match = MATCH_EXACT;
 
-	while ((ch = getopt(argc, argv, "ygxXf")) != -1) {
+	while ((ch = getopt(argc, argv, "ygxXfr:")) != -1) {
 		switch (ch) {
 			case 'y':
 				yes = 1;
@@ -44,6 +45,9 @@ exec_install(int argc, char **argv)
 				break;
 			case 'X':
 				match = MATCH_EREGEX;
+				break;
+			case 'r':
+				reponame = optarg;
 				break;
 			default:
 				usage_install();
@@ -72,7 +76,7 @@ exec_install(int argc, char **argv)
 	}
 
 	for (i = 0; i < argc; i++) {
-		if ((it = pkgdb_rquery(db, argv[i], match, FIELD_NAME)) == NULL) {
+		if ((it = pkgdb_rquery(db, argv[i], match, FIELD_NAME, reponame)) == NULL) {
 			goto cleanup;
 		}
 

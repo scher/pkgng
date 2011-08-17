@@ -12,7 +12,7 @@
 void
 usage_search(void)
 {
-	fprintf(stderr, "usage: pkg search [-gxXcd] pattern\n\n");
+	fprintf(stderr, "usage: pkg search [-r reponame] [-gxXcd] pattern\n\n");
 	fprintf(stderr, "For more information see 'pkg help search'.\n");
 }
 
@@ -20,6 +20,7 @@ int
 exec_search(int argc, char **argv)
 {
 	const char *pattern = NULL;
+	const char *reponame = NULL;
 	match_t match = MATCH_EXACT;
 	int  retcode = EPKG_OK;
 	pkgdb_field field = FIELD_NAME;
@@ -34,7 +35,7 @@ exec_search(int argc, char **argv)
 	struct pkg_license *lic = NULL;
 	struct pkg_option *opt = NULL;
 
-	while ((ch = getopt(argc, argv, "gxXcd")) != -1) {
+	while ((ch = getopt(argc, argv, "gxXcdr:")) != -1) {
 		switch (ch) {
 			case 'g':
 				match = MATCH_GLOB;
@@ -50,6 +51,9 @@ exec_search(int argc, char **argv)
 				break;
 			case 'd':
 				field = FIELD_DESC;
+				break;
+			case 'r':
+				reponame = optarg;
 				break;
 			default:
 				usage_search();
@@ -70,7 +74,7 @@ exec_search(int argc, char **argv)
 	if (pkgdb_open(&db, PKGDB_REMOTE) != EPKG_OK)
 		return (EPKG_FATAL);
 
-	if ((it = pkgdb_rquery(db, pattern, match, field)) == NULL) {
+	if ((it = pkgdb_rquery(db, pattern, match, field, reponame)) == NULL) {
 		pkgdb_close(db);
 		return (EPKG_FATAL);
 	}

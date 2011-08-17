@@ -581,7 +581,7 @@ int pkgdb_unregister_pkg(struct pkgdb *pkg, const char *origin);
 struct pkgdb_it * pkgdb_query(struct pkgdb *db, const char *pattern,
 							  match_t type);
 struct pkgdb_it * pkgdb_rquery(struct pkgdb *db, const char *pattern,
-		match_t type, unsigned int field);
+		match_t type, unsigned int field, const char *reponame);
 
 /**
  * 
