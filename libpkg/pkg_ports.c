@@ -18,6 +18,7 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 	int nbel, i;
 	size_t next;
 	size_t len;
+	size_t j;
 	char sha256[SHA256_DIGEST_LENGTH * 2 + 1];
 	char path[MAXPATHLEN + 1];
 	char *last_plist_file = NULL;
@@ -101,24 +102,26 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 
 					/* workaround to detect the @dirrmtry */
 					if (comment[0] == '#') {
-						while (!isspace(cmd[0]))
-							cmd++;
-
-						while (isspace(cmd[0]))
-							cmd++;
-
 						buf = cmd;
-						while (!isspace(buf[0]) && buf[0] != '\0')
+
+						while (!isspace(buf[0]))
 							buf++;
-						buf[0] = '\0';
 
-						while (cmd[0] == '\"')
-							cmd++;
+						while (isspace(buf[0]))
+							buf++;
 
-						while (cmd[strlen(cmd) -1] == '\"')
-							cmd[strlen(cmd) -1] = '\0';
+						for (j = 0; j < strlen(buf); j++) {
+							if (isspace(buf[j]))
+								buf[j]= '\0';
+						}
 
-						ret += pkg_adddir(pkg, cmd);
+						while (buf[0] == '"')
+							buf++;
+
+						for (j = strlen(buf) - 1; j > 0 && buf[j] == '"'; j--)
+							buf[j] = '\0';
+
+						ret += pkg_adddir(pkg, buf);
 					}
 				} else {
 					if (sbuf_len(exec_scripts) == 0)
