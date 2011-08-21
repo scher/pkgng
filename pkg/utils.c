@@ -44,6 +44,11 @@ print_info(struct pkg * const pkg, unsigned int opt)
                 printf("%-15s: %s\n", "Origin", pkg_get(pkg, PKG_ORIGIN));
                 printf("%-15s: %s\n", "Prefix", pkg_get(pkg, PKG_PREFIX));
 
+		if (pkg_get(pkg, PKG_REPONAME) != NULL)
+			printf("%-15s: %s [%s]\n", "Repository",
+					pkg_get(pkg, PKG_REPONAME),
+					pkg_get(pkg, PKG_REPOURL));
+
                 if (!pkg_list_isempty(pkg, PKG_CATEGORIES)) {
                         printf("%-15s:", "Categories");
                         while (pkg_categories(pkg, &cat) == EPKG_OK)
