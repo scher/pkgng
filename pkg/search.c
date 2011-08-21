@@ -2,17 +2,19 @@
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
-#include <libutil.h>
 #include <sysexits.h>
 
 #include <pkg.h>
 
 #include "search.h"
+#include "utils.h"
 
 void
 usage_search(void)
 {
-	fprintf(stderr, "usage: pkg search [-r reponame] [-gxXcd] pattern\n\n");
+	fprintf(stderr, "usage: pkg search [-r reponame] <pkg-name>\n");
+	fprintf(stderr, "       pkg search [-r reponame] [-fDsqop] <pkg-name>\n");
+	fprintf(stderr, "       pkg search [-r reponame] [-gxXcdfDsqop] <pattern>\n\n");
 	fprintf(stderr, "For more information see 'pkg help search'.\n");
 }
 
@@ -21,21 +23,16 @@ exec_search(int argc, char **argv)
 {
 	const char *pattern = NULL;
 	const char *reponame = NULL;
+	int retcode = EPKG_OK, ch;
+	int flags = PKG_LOAD_BASIC;
+	unsigned int opt = 0;
 	match_t match = MATCH_EXACT;
-	int  retcode = EPKG_OK;
 	pkgdb_field field = FIELD_NAME;
-	char size[7];
-	int ch;
-	int multi_repos = 0;
-	int flags = PKG_LOAD_BASIC|PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES|PKG_LOAD_OPTIONS;
 	struct pkgdb *db = NULL;
 	struct pkgdb_it *it = NULL;
 	struct pkg *pkg = NULL;
-	struct pkg_category *cat = NULL;
-	struct pkg_license *lic = NULL;
-	struct pkg_option *opt = NULL;
 
-	while ((ch = getopt(argc, argv, "gxXcdr:")) != -1) {
+	while ((ch = getopt(argc, argv, "gxXcdr:fDsqop")) != -1) {
 		switch (ch) {
 			case 'g':
 				match = MATCH_GLOB;
@@ -54,6 +51,25 @@ exec_search(int argc, char **argv)
 				break;
 			case 'r':
 				reponame = optarg;
+			case 'f':
+				opt |= INFO_FULL;
+				flags |= PKG_LOAD_CATEGORIES|PKG_LOAD_LICENSES|PKG_LOAD_OPTIONS;
+				break;
+			case 'D':
+				opt |= INFO_PRINT_DEP;
+				flags |= PKG_LOAD_DEPS;
+				break;
+			case 's':
+				opt |= INFO_SIZE;
+				break;
+			case 'q':
+				opt |= INFO_QUIET;
+				break;
+			case 'o':
+				opt |= INFO_ORIGIN;
+				break;
+			case 'p':
+				opt |= INFO_PREFIX;
 				break;
 			default:
 				usage_search();
@@ -72,62 +88,16 @@ exec_search(int argc, char **argv)
 	pattern = argv[0];
 
 	if (pkgdb_open(&db, PKGDB_REMOTE) != EPKG_OK)
-		return (EPKG_FATAL);
+		return (EX_IOERR);
 
 	if ((it = pkgdb_rquery(db, pattern, match, field, reponame)) == NULL) {
 		pkgdb_close(db);
-		return (EPKG_FATAL);
+		return (1);
 	}
 
-	if (pkg_config("PACKAGESITE") == NULL)
-		multi_repos = 1;
+	while ((retcode = pkgdb_it_next(it, &pkg, flags)) == EPKG_OK)
+		print_info(pkg, opt);
 
-	while ((retcode = pkgdb_it_next(it, &pkg, flags)) == EPKG_OK) {
-		printf("Name       : %s\n", pkg_get(pkg, PKG_NAME));
-		printf("Version    : %s\n", pkg_get(pkg, PKG_VERSION));
-		printf("Origin     : %s\n", pkg_get(pkg, PKG_ORIGIN));
-		printf("Prefix     : %s\n", pkg_get(pkg, PKG_PREFIX));
-		printf("Arch:      : %s\n", pkg_get(pkg, PKG_ARCH));
-
-		if (multi_repos == 1)
-			printf("Repository : %s [%s]\n", pkg_get(pkg, PKG_REPONAME), pkg_get(pkg, PKG_REPOURL));
-
-		if (!pkg_list_isempty(pkg, PKG_CATEGORIES)) {
-			printf("Categories :");
-			while (pkg_categories(pkg, &cat) == EPKG_OK)
-				printf(" %s", pkg_category_name(cat));
-			printf("\n");
-		}
-
-		if (!pkg_list_isempty(pkg, PKG_LICENSES)) {
-			printf("Licenses   :");
-			while (pkg_licenses(pkg, &lic) == EPKG_OK) {
-				printf(" %s", pkg_license_name(lic));
-				if (pkg_licenselogic(pkg) != 1)
-					printf(" %c", pkg_licenselogic(pkg));
-				else
-					printf(" ");
-			}
-			printf("\b \n");
-		}
-
-		printf("Maintainer : %s\n", pkg_get(pkg, PKG_MAINTAINER));
-		printf("WWW        : %s\n", pkg_get(pkg, PKG_WWW));
-		printf("Comment    : %s\n", pkg_get(pkg, PKG_COMMENT));
-
-		if (!pkg_list_isempty(pkg, PKG_OPTIONS)) {
-			printf("Options    :\n");
-			while (pkg_options(pkg, &opt) == EPKG_OK)
-				printf("\t%s: %s\n", pkg_option_opt(opt), pkg_option_value(opt));
-		}
-
-		humanize_number(size, sizeof(size), pkg_new_flatsize(pkg), "B", HN_AUTOSCALE, 0);
-		printf("Flat size  : %s\n", size);
-		humanize_number(size, sizeof(size), pkg_new_pkgsize(pkg), "B", HN_AUTOSCALE, 0);
-		printf("Pkg size   : %s\n\n", size);
-	}
-
-	pkg_free(pkg);
 	pkgdb_it_free(it);
 	pkgdb_close(db);
 
