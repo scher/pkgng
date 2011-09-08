@@ -44,7 +44,7 @@ print_info(struct pkg * const pkg, unsigned int opt)
                 printf("%-15s: %s\n", "Origin", pkg_get(pkg, PKG_ORIGIN));
                 printf("%-15s: %s\n", "Prefix", pkg_get(pkg, PKG_PREFIX));
 
-		if (pkg_get(pkg, PKG_REPONAME) != NULL)
+		if (pkg_type(pkg) == PKG_REMOTE)
 			printf("%-15s: %s [%s]\n", "Repository",
 					pkg_get(pkg, PKG_REPONAME),
 					pkg_get(pkg, PKG_REPOURL));
