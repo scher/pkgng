@@ -3,12 +3,14 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <wctype.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <yaml.h>
+#include <wchar.h>
 
 #include "pkg.h"
 #include "pkg_event.h"
@@ -70,6 +72,69 @@ static struct manifest_key {
 	{ NULL, -99, -99, NULL}
 };
 
+static int
+urlencode(const char *src, struct sbuf **dest)
+{
+	size_t len;
+	size_t i;
+
+	if (*dest == NULL)
+		*dest = sbuf_new_auto();
+	else
+		sbuf_clear(*dest);
+
+	len = strlen(src);
+	for (i = 0; i < len; i++) {
+		if (!isascii(src[i]) || src[i] == '%')
+			sbuf_printf(*dest, "%%%.2x", (unsigned char)src[i]);
+		else
+			sbuf_putc(*dest, src[i]);
+	}
+	sbuf_finish(*dest);
+
+	return (EPKG_OK);
+}
+
+
+static int
+urldecode(const char *src, struct sbuf **dest)
+{
+	size_t len;
+	size_t i;
+	char c;
+	char hex[] = {'\0', '\0', '\0'};
+
+	if (*dest == NULL)
+		*dest = sbuf_new_auto();
+	else
+		sbuf_reset(*dest);
+
+	len = strlen(src);
+	for (i = 0; i < len; i++) {
+		if (src[i] != '%') {
+			sbuf_putc(*dest, src[i]);
+		} else {
+			if (i + 2 > len) {
+				pkg_emit_error("unexpected end of string");
+				return (EPKG_FATAL);
+			}
+
+			hex[0] = src[++i];
+			hex[1] = src[++i];
+			errno = 0;
+			c = strtol(hex, NULL, 16);
+			if (errno != 0) {
+				pkg_emit_errno("strtol()", hex);
+				return (EPKG_FATAL);
+			}
+			sbuf_putc(*dest, c);
+		}
+	}
+	sbuf_finish(*dest);
+
+	return (EPKG_OK);
+}
+
 int
 pkg_load_manifest_file(struct pkg *pkg, const char *fpath)
 {
@@ -89,13 +154,17 @@ pkg_load_manifest_file(struct pkg *pkg, const char *fpath)
 static int
 pkg_set_from_node(struct pkg *pkg, yaml_node_t *val, __unused yaml_document_t *doc, int attr)
 {
+	int ret = EPKG_OK;
+
 	while (val->data.scalar.length > 0 &&
 			val->data.scalar.value[val->data.scalar.length - 1] == '\n') {
 		val->data.scalar.value[val->data.scalar.length - 1] = '\0';
 		val->data.scalar.length--;
 	}
 
-	return (pkg_set(pkg, attr, val->data.scalar.value));
+	ret = urldecode(val->data.scalar.value, &pkg->fields[attr]);
+
+	return (ret);
 }
 
 static int
@@ -184,6 +253,7 @@ parse_sequence(struct pkg * pkg, yaml_node_t *node, yaml_document_t *doc, int at
 static int
 parse_mapping(struct pkg *pkg, yaml_node_t *item, yaml_document_t *doc, int attr)
 {
+	struct sbuf *tmp = NULL;
 	yaml_node_pair_t *pair;
 	yaml_node_t *key;
 	yaml_node_t *val;
@@ -216,9 +286,10 @@ parse_mapping(struct pkg *pkg, yaml_node_t *item, yaml_document_t *doc, int attr
 					pkg_set_dirs_from_node(pkg, val, doc, key->data.scalar.value);
 				break;
 			case PKG_FILES:
-				if (val->type == YAML_SCALAR_NODE && val->data.scalar.length > 0)
-					pkg_addfile(pkg, key->data.scalar.value, val->data.scalar.length == 64 ? val->data.scalar.value : NULL);
-				else if (val->type == YAML_MAPPING_NODE)
+				if (val->type == YAML_SCALAR_NODE && val->data.scalar.length > 0) {
+					urldecode(key->data.scalar.value, &tmp);
+					pkg_addfile(pkg, sbuf_data(tmp), val->data.scalar.length == 64 ? val->data.scalar.value : NULL);
+				} else if (val->type == YAML_MAPPING_NODE)
 					pkg_set_files_from_node(pkg, val, doc, key->data.scalar.value);
 				else
 					pkg_emit_error("Skipping malformed files %s",
@@ -265,18 +336,20 @@ parse_mapping(struct pkg *pkg, yaml_node_t *item, yaml_document_t *doc, int attr
 
 		++pair;
 	}
+
+	sbuf_free(tmp);
 	return (EPKG_OK);
 }
 
 static int
 pkg_set_files_from_node(struct pkg *pkg, yaml_node_t *item, yaml_document_t *doc, const char *filename) {
-	yaml_node_pair_t *pair;
-	yaml_node_t *key;
-	yaml_node_t *val;
+	yaml_node_pair_t *pair = NULL;
+	yaml_node_t *key = NULL;
+	yaml_node_t *val = NULL;
 	const char *sum = NULL;
 	const char *uname = NULL;
 	const char *gname = NULL;
-	void *set;
+	void *set = NULL;
 	mode_t perm = 0;
 
 	pair = item->data.mapping.pairs.start;
@@ -527,6 +600,7 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 	struct pkg_license *license = NULL;
 	struct pkg_user *user = NULL;
 	struct pkg_group *group = NULL;
+	struct sbuf *tmpsbuf = NULL;
 	int rc = EPKG_OK;
 	int mapping;
 	int seq = -1;
@@ -535,10 +609,11 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 	int files = -1;
 	int options = -1;
 	int scripts = -1;
-	const char *script_types;
+	const char *script_types = NULL;
 	struct sbuf *destbuf = sbuf_new_auto();
 
 	yaml_emitter_initialize(&emitter);
+	yaml_emitter_set_unicode(&emitter, 1);
 	yaml_emitter_set_output(&emitter, yaml_write_buf, destbuf);
 
 #define manifest_append_kv(map, key, val) yaml_document_append_mapping_pair(&doc, map, \
@@ -579,7 +654,8 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 
 	snprintf(tmpbuf, BUFSIZ, "%" PRId64, pkg_flatsize(pkg));
 	manifest_append_kv(mapping, "flatsize", tmpbuf);
-	manifest_append_kv_literal(mapping, "desc", pkg_get(pkg, PKG_DESC));
+	urlencode(pkg_get(pkg, PKG_DESC), &tmpsbuf);
+	manifest_append_kv_literal(mapping, "desc", sbuf_data(tmpsbuf));
 
 	while (pkg_deps(pkg, &dep) == EPKG_OK) {
 		if (depsmap == -1) {
@@ -631,7 +707,8 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 					yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, "files"), 5, YAML_PLAIN_SCALAR_STYLE),
 					files);
 		}
-		manifest_append_kv(files, pkg_file_path(file), pkg_file_sha256(file) && strlen(pkg_file_sha256(file)) > 0 ? pkg_file_sha256(file) : "-");
+		urlencode(pkg_file_path(file), &tmpsbuf);
+		manifest_append_kv(files, sbuf_data(tmpsbuf), pkg_file_sha256(file) && strlen(pkg_file_sha256(file)) > 0 ? pkg_file_sha256(file) : "-");
 	}
 
 	seq = -1;
@@ -641,7 +718,7 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 	while (pkg_scripts(pkg, &script) == EPKG_OK) {
 		if (scripts == -1) {
 			scripts = yaml_document_add_mapping(&doc, NULL, YAML_BLOCK_MAPPING_STYLE);
-			yaml_document_append_mapping_pair(&doc, mapping, 
+			yaml_document_append_mapping_pair(&doc, mapping,
 					yaml_document_add_scalar(&doc, NULL, __DECONST(yaml_char_t*, "scripts"), 7, YAML_PLAIN_SCALAR_STYLE),
 					scripts);
 		}
@@ -682,11 +759,11 @@ pkg_emit_manifest(struct pkg *pkg, char **dest)
 	if (!yaml_emitter_dump(&emitter, &doc))
 		rc = EPKG_FATAL;
 
+	sbuf_free(tmpsbuf);
 	sbuf_finish(destbuf);
 	*dest = strdup(sbuf_data(destbuf));
 	sbuf_delete(destbuf);
 
 	yaml_emitter_delete(&emitter);
 	return (rc);
-
 }

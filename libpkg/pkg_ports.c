@@ -1,14 +1,24 @@
+#include <sys/types.h>
 #include <sys/stat.h>
 
 #include <assert.h>
-#include <string.h>
+#include <ctype.h>
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <ctype.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "pkg.h"
 #include "pkg_event.h"
 #include "pkg_private.h"
+
+
+struct hardlinks {
+	ino_t *inodes;
+	size_t len;
+	size_t cap;
+};
 
 int
 ports_parse_plist(struct pkg *pkg, char *plist)
@@ -29,10 +39,21 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 	off_t sz = 0;
 	const char *slash;
 	int64_t flatsize = 0;
+	struct hardlinks hardlinks = {NULL, 0, 0};
+	bool regular;
 	bool filestarted = false; /* ugly workaround for easy_install ports */
 	struct sbuf *exec_scripts = sbuf_new_auto();
 	struct sbuf *unexec_scripts = sbuf_new_auto();
 	struct sbuf *pre_unexec_scripts = sbuf_new_auto();
+	void *set = NULL;
+	const char *uname = NULL;
+	const char *gname = NULL;
+	mode_t perm=0;
+	regex_t preg1, preg2;
+	regmatch_t pmatch[2];
+
+	regcomp(&preg1, "[[:space:]]\"(/[^\"]+)", REG_EXTENDED);
+	regcomp(&preg2, "[[:space:]](/[[:graph:]/]+)", REG_EXTENDED);
 
 	buf = NULL;
 	p = NULL;
@@ -90,8 +111,25 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 						comment[0] = '#';
 						comment[1] = '\0';
 					}
-					if (strchr(cmd,'-') || strchr(cmd, '*'))
+					/* remove the glob if any */
+					if (comment[0] == '#') {
+						if (strchr(cmd, '*'))
 						comment[0] = '\0';
+
+						buf = cmd;
+
+						/* start remove mkdir -? */
+						/* remove the command */
+						while (!isspace(buf[0]))
+							buf++;
+
+						while (isspace(buf[0]))
+							buf++;
+
+						if (buf[0] == '-')
+							comment[0] = '\0';
+						/* end remove mkdir -? */
+					}
 
 					if (filestarted) {
 						if (sbuf_len(unexec_scripts) == 0)
@@ -107,24 +145,31 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 					if (comment[0] == '#') {
 						buf = cmd;
 
+						/* remove the @dirrm{,try}
+						 * command */
 						while (!isspace(buf[0]))
 							buf++;
 
-						while (isspace(buf[0]))
-							buf++;
+						split_chr(buf, '|');
 
-						for (j = 0; j < strlen(buf); j++) {
-							if (isspace(buf[j]))
-								buf[j]= '\0';
+						if (strstr(buf, "\"/")) {
+							while (regexec(&preg1, buf, 2, pmatch, 0) == 0) {
+								strlcpy(path, &buf[pmatch[1].rm_so], pmatch[1].rm_eo - pmatch[1].rm_so + 1);
+								buf+=pmatch[1].rm_eo;
+								if (!strcmp(path, "/dev/null"))
+									continue;
+								ret += pkg_adddir_attr(pkg, path, uname, gname, perm);
+							}
+						} else {
+							while (regexec(&preg2, buf, 2, pmatch, 0) == 0) {
+								strlcpy(path, &buf[pmatch[1].rm_so], pmatch[1].rm_eo - pmatch[1].rm_so + 1);
+								buf+=pmatch[1].rm_eo;
+								if (!strcmp(path, "/dev/null"))
+									continue;
+								ret += pkg_adddir_attr(pkg, path, uname, gname, perm);
+							}
 						}
 
-						while (buf[0] == '"')
-							buf++;
-
-						for (j = strlen(buf) - 1; j > 0 && buf[j] == '"'; j--)
-							buf[j] = '\0';
-
-						ret += pkg_adddir(pkg, buf);
 					}
 				} else {
 					if (sbuf_len(exec_scripts) == 0)
@@ -158,8 +203,44 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 					sbuf_cat(unexec_scripts, "#@unexec\n"); /* to be able to regenerate the @unexec in pkg2legacy */
 				sbuf_printf(unexec_scripts, "#@dirrm %s\n", path);
 
-				ret += pkg_adddir(pkg, path);
+				ret += pkg_adddir_attr(pkg, path, uname, gname, perm);
 
+			} else if (STARTS_WITH(plist_p, "@mode")) {
+				buf = plist_p;
+				buf += 5;
+				while (isspace(buf[0]))
+					buf++;
+
+				if (buf[0] == '\0') {
+					perm = 0;
+				} else {
+					if ((set = setmode(buf)) == NULL) {
+						pkg_emit_error("%s wrong @mode value", buf);
+						perm = 0;
+					} else {
+						getmode(set, 0);
+					}
+				}
+			} else if (STARTS_WITH(plist_p, "@owner")) {
+				buf = plist_p;
+				buf += 6;
+				while (isspace(buf[0]))
+					buf++;
+
+				if (buf[0])
+					uname = NULL;
+				else
+					uname = buf;
+			} else if (STARTS_WITH(plist_p, "@group")) {
+				buf = plist_p;
+				buf += 6;
+				while (isspace(buf[0]))
+					buf++;
+
+				if (buf[0])
+					gname = NULL;
+				else
+					gname = buf;
 			} else {
 				pkg_emit_error("%s is deprecated, ignoring", plist_p);
 			}
@@ -181,14 +262,37 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 			snprintf(path, sizeof(path), "%s%s%s", prefix, slash, buf);
 
 			if (lstat(path, &st) == 0) {
+				p = NULL;
+				regular = true;
+
 				if (S_ISLNK(st.st_mode)) {
-					p = NULL;
-				} else {
+					regular = false;
+				}
+				/* Special case for hardlinks */
+				if (st.st_nlink > 1) {
+					for (j = 0; j < hardlinks.len; j++) {
+						if (hardlinks.inodes[j] == st.st_ino) {
+							regular = false;
+							break;
+						}
+					}
+					/* This is the first time we see this hardlink */
+					if (regular == true) {
+						if (hardlinks.cap <= hardlinks.len) {
+							hardlinks.cap += 10;
+							hardlinks.inodes = reallocf(hardlinks.inodes,
+														hardlinks.cap);
+						}
+						hardlinks.inodes[hardlinks.len++] = st.st_ino;
+					}
+				}
+
+				if (regular) {
 					flatsize += st.st_size;
 					sha256_file(path, sha256);
 					p = sha256;
 				}
-				ret += pkg_addfile(pkg, path, p);
+				ret += pkg_addfile_attr(pkg, path, p, uname, gname, perm);
 			} else {
 				pkg_emit_errno("lstat", path);
 			}
@@ -215,9 +319,12 @@ ports_parse_plist(struct pkg *pkg, char *plist)
 		pkg_appendscript(pkg, sbuf_data(unexec_scripts), PKG_SCRIPT_POST_DEINSTALL);
 	}
 
+	regfree(&preg1);
+	regfree(&preg2);
 	sbuf_delete(pre_unexec_scripts);
 	sbuf_delete(exec_scripts);
 	sbuf_delete(unexec_scripts);
+	free(hardlinks.inodes);
 
 	free(plist_buf);
 
