@@ -5,6 +5,7 @@
 #include <libutil.h>
 #include <pkg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>
 #include <unistd.h>
@@ -353,7 +354,7 @@ analyse_query_string(char *qstr, int *flags, char *multiline)
 						fprintf(stderr, "Invalid query format string, you can't query '%%%c' and '%%L' at the same time\n", *multiline);
 						return (EPKG_FATAL);
 					}
-					*multiline = 'M';
+					*multiline = 'L';
 					*flags |= PKG_LOAD_LICENSES;
 					break;
 				case 'U':
@@ -390,7 +391,7 @@ analyse_query_string(char *qstr, int *flags, char *multiline)
 				case '?':
 					qstr++;
 					if (qstr[0] != 'd' && qstr[0] != 'r' && qstr[0] != 'C' &&
-							qstr[0] != 'F' && qstr[0] != '0' &&
+							qstr[0] != 'F' && qstr[0] != 'O' &&
 							qstr[0] != 'D' && qstr[0] != 'L' &&
 							qstr[0] != 'U' && qstr[0] != 'G' &&
 							qstr[0] != 'K' ) {
@@ -456,7 +457,8 @@ void
 usage_query(void)
 {
 	fprintf(stderr, "usage: pkg query -a <query-format>\n");
-	fprintf(stderr, "       pkg query [-gxX] <query-format> <pkg-name>\n");
+	fprintf(stderr, "       pkg query -f <pkg-name> <query-format>\n");
+	fprintf(stderr, "       pkg query [-gxX] <query-format> <pattern> <...>\n\n");
 	fprintf(stderr, "For more information see 'pkg help query.\n");
 }
 
@@ -475,7 +477,7 @@ exec_query(int argc, char **argv)
 	int i;
 	char multiline = 0;
 
-	while ((ch = getopt(argc, argv, "agxX")) != -1) {
+	while ((ch = getopt(argc, argv, "agxXf:")) != -1) {
 		switch (ch) {
 			case 'a':
 				match = MATCH_ALL;
@@ -488,6 +490,9 @@ exec_query(int argc, char **argv)
 				break;
 			case 'X':
 				match = MATCH_EREGEX;
+				break;
+			case 'f':
+				pkgname = optarg;
 				break;
 			default:
 				usage_query();
@@ -503,13 +508,23 @@ exec_query(int argc, char **argv)
 		return (EX_USAGE);
 	}
 
-	if ((argc == 1) ^ (match == MATCH_ALL)) {
+	if ((argc == 1) ^ (match == MATCH_ALL) && pkgname == NULL) {
 		usage_query();
 		return (EX_USAGE);
 	}
 
 	if (analyse_query_string(argv[0], &query_flags, &multiline) != EPKG_OK)
 		return (EX_USAGE);
+
+	if (pkgname != NULL) {
+		if (pkg_open(&pkg, pkgname) != EPKG_OK) {
+			return (1);
+		}
+		
+		print_query(pkg, argv[0], multiline);
+		pkg_free(pkg);
+		return (0);
+	}
 
 	if (pkgdb_open(&db, PKGDB_DEFAULT) != EPKG_OK)
 		return (EX_IOERR);
@@ -547,6 +562,9 @@ exec_query(int argc, char **argv)
 			pkgdb_it_free(it);
 		}
 	}
+
+	pkg_free(pkg);
+	pkgdb_close(db);
 
 	return (retcode);
 }
