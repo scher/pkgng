@@ -41,7 +41,7 @@ static const char * const scripts[] = {
 void
 usage_register(void)
 {
-	fprintf(stderr, "usage: pkg register [-l] -m <metadatadir> -f <plist_file>\n\n");
+	fprintf(stderr, "usage: pkg register [-ld] [-a <arch>] [-i <input-path>] -m <metadatadir> -f <plist-file>\n\n");
 	fprintf(stderr, "For more information see 'pkg help register'.\n");
 }
 
@@ -83,21 +83,23 @@ exec_register(int argc, char **argv)
 		switch (ch) {
 			case 'f':
 				if ((plist = strdup(optarg)) == NULL)
-					errx(1, "cannot allocate memory");
+					err(1, "cannot allocate memory");
 
 				break;
 			case 'm':
-				mdir = strdup(optarg);
+				if ((mdir = strdup(optarg)) == NULL)
+					err(1, "cannot allocate memory");
 				break;
 			case 'a':
-				arch = strdup(optarg);
+				if ((arch = strdup(optarg)) == NULL)
+					err(1, "cannot allocate memory");
 				break;
 			case 'd':
 				pkg_setautomatic(pkg);
 				break;
 			case 'i':
 				if ((input_path = strdup(optarg)) == NULL)
-					errx(1, "cannot allocate memory");
+					err(1, "cannot allocate memory");
 				break;
 			case 'l':
 				legacy = true;
