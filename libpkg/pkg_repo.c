@@ -38,18 +38,19 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
 	 * working on a single remote repository,
 	 * which means that PACKAGESITE is defined.
 	 *
-	 * NOTE2: The 'main' and 'temp' names are always
+	 * NOTE2: The 'main', 'temp' and 'memdb' names are always
 	 * reserved, because they are the names of the 
-	 * main and temp databases, when working with
-	 * ATTACH'ed databases.
+	 * main, temp and memory (used in autoremove) databases, 
+	 * when working with ATTACH'ed databases.
          */
 
 	repo_name = pkg_repos_get_name(re);
         while (pkg_repos_next(repos, &next) == EPKG_OK)
-                if ((strcmp(repo_name, pkg_repos_get_name(next)) == 0) || \
-                    (strcmp(repo_name, "repo") == 0) || \
-		    (strcmp(repo_name, "main") == 0) || \
-		    (strcmp(repo_name, "temp") == 0))
+                if ((strcmp(repo_name, pkg_repos_get_name(next)) == 0) ||
+                    (strcmp(repo_name, "repo") == 0) ||
+		    (strcmp(repo_name, "main") == 0) ||
+		    (strcmp(repo_name, "temp") == 0) ||
+		    (strcmp(repo_name, "memdb") == 0))
                         return (EPKG_FATAL);
 
         return (EPKG_OK);
