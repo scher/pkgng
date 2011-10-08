@@ -33,15 +33,16 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
         /* 
          * Find if a repository name already exists.
 	 *
-         * NOTE1: The 'repo' name is always reserved, 
-         * as it is being used by default when 
+         * NOTE1: The 'repo' and 'remote' names are always reserved, 
+         * as they are being used by default when 
 	 * working on a single remote repository,
 	 * which means that PACKAGESITE is defined.
 	 *
-	 * NOTE2: The 'main', 'temp' and 'memdb' names are always
+	 * NOTE2: The 'main' and 'temp' names are always
 	 * reserved, because they are the names of the 
-	 * main, temp and memory (used in autoremove) databases, 
-	 * when working with ATTACH'ed databases.
+	 * main and temp databases, 
+	 * when working with ATTACH'ed databases in
+	 * multi-repos mode.
          */
 
 	repo_name = pkg_repos_get_name(re);
@@ -50,7 +51,7 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
                     (strcmp(repo_name, "repo") == 0) ||
 		    (strcmp(repo_name, "main") == 0) ||
 		    (strcmp(repo_name, "temp") == 0) ||
-		    (strcmp(repo_name, "memdb") == 0))
+		    (strcmp(repo_name, "remote") == 0))
                         return (EPKG_FATAL);
 
         return (EPKG_OK);
