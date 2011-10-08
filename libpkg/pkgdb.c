@@ -487,6 +487,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	char tmpbuf[BUFSIZ];
 	struct sbuf *sql = NULL;
 	bool create = false;
+	bool def_repo = false; /* default repo flag for multi-repos */
 
 	/*
 	 * Set the pointer to NULL now. Change it to the real pointer just
@@ -568,13 +569,13 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 			fprintf(stderr, "\t/!\\		     YOU HAVE BEEN WARNED		/!\\\n\n");
 
 			if (pkg_repos_new(&repos) != EPKG_OK) {
-				pkg_emit_error("pkg_repos_new: %s", "cannot create multi repo object");
+				pkg_emit_error("cannot create multi repo object");
 				pkgdb_close(db);
 				return (EPKG_FATAL);
 			}
 
 			if (pkg_repos_load(repos) != EPKG_OK) {
-				pkg_emit_error("pkg_repos_load: %s", "cannot load repositories");
+				pkg_emit_error("cannot load repositories");
 				pkgdb_close(db);
 				return (EPKG_FATAL);
 			}
@@ -583,6 +584,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 
 			while (pkg_repos_next(repos, &re) == EPKG_OK) {
 				repo_name = pkg_repos_get_name(re);
+
 				snprintf(remotepath, sizeof(remotepath), "%s/%s.sqlite",
 						dbdir, repo_name);
 
@@ -594,11 +596,26 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 					return (EPKG_FATAL);
 				}
 
+				/* search for the default repo and attach it as 'remote' */
+				if (strcmp(repo_name, "default") == 0) {
+					def_repo = true;
+					repo_name = "remote";
+				}
+
 				snprintf(tmpbuf, sizeof(tmpbuf), "ATTACH '%s' AS '%s';", remotepath, repo_name);
 				sbuf_cat(sql, tmpbuf);
 			}
 
 			sbuf_finish(sql);
+
+			/* check if a default repo is defined */
+			if (def_repo == false) {
+				pkg_emit_error("no default repository defined");
+				pkgdb_close(db);
+				sbuf_delete(sql);
+				pkg_repos_free(repos);
+				return(EPKG_FATAL);
+			}
 
 			if (sql_exec(db->sqlite, sbuf_get(sql)) != EPKG_OK) {
 				sbuf_delete(sql);

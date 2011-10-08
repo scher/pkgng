@@ -33,7 +33,7 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
         /* 
          * Find if a repository name already exists.
 	 *
-         * NOTE1: The 'repo' and 'remote' names are always reserved, 
+         * NOTE1: The 'repo' names are always reserved, 
          * as they are being used by default when 
 	 * working on a single remote repository,
 	 * which means that PACKAGESITE is defined.
@@ -50,8 +50,7 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
                 if ((strcmp(repo_name, pkg_repos_get_name(next)) == 0) ||
                     (strcmp(repo_name, "repo") == 0) ||
 		    (strcmp(repo_name, "main") == 0) ||
-		    (strcmp(repo_name, "temp") == 0) ||
-		    (strcmp(repo_name, "remote") == 0))
+		    (strcmp(repo_name, "temp") == 0))
                         return (EPKG_FATAL);
 
         return (EPKG_OK);
