@@ -61,13 +61,13 @@ pkg_repo_fetch(struct pkg *pkg)
 {
 	char dest[MAXPATHLEN + 1];
 	char url[MAXPATHLEN + 1];
+	int fetched = 0;
 	char cksum[SHA256_DIGEST_LENGTH * 2 +1];
 	char *path = NULL;
 	const char *packagesite = NULL;
 	int retcode = EPKG_OK;
 
-	assert((pkg->type & PKG_REMOTE) == PKG_REMOTE ||
-		(pkg->type & PKG_UPGRADE) == PKG_UPGRADE);
+	assert((pkg->type & PKG_REMOTE) == PKG_REMOTE);
 
 	snprintf(dest, sizeof(dest), "%s/%s", pkg_config("PKG_CACHEDIR"),
 			 pkg_get(pkg, PKG_REPOPATH));
@@ -101,6 +101,7 @@ pkg_repo_fetch(struct pkg *pkg)
 		snprintf(url, sizeof(url), "%s/%s", packagesite, pkg_get(pkg, PKG_REPOPATH));
 
 	retcode = pkg_fetch_file(url, dest);
+	fetched = 1;
 
 	if (retcode != EPKG_OK)
 		goto cleanup;
@@ -109,9 +110,16 @@ pkg_repo_fetch(struct pkg *pkg)
 	retcode = sha256_file(dest, cksum);
 	if (retcode == EPKG_OK)
 		if (strcmp(cksum, pkg_get(pkg, PKG_CKSUM))) {
-			pkg_emit_error("%s-%s failed checksum from repository",
-						   pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
-			retcode = EPKG_FATAL;
+			if (fetched == 1) {
+				pkg_emit_error("%s-%s failed checksum from repository",
+						pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
+				retcode = EPKG_FATAL;
+			} else {
+				pkg_emit_error("cached package %s-%s: checksum mismatch, fetching from remote",
+						pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
+				unlink(dest);
+				return (pkg_repo_fetch(pkg));
+			}
 		}
 
 	cleanup:
@@ -398,6 +406,7 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 	struct pkg_category *category = NULL;
 	struct pkg_license *license = NULL;
 	struct pkg_option *option = NULL;
+	struct sbuf *manifest = sbuf_new_auto();
 	char *ext = NULL;
 
 	sqlite3 *sqlite = NULL;
@@ -510,19 +519,12 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 		sqlite3_shutdown();
 		return (EPKG_FATAL);
 	}
-
-	if (sqlite3_exec(sqlite, initsql, NULL, NULL, &errmsg) != SQLITE_OK) {
-		pkg_emit_error("sqlite: %s", errmsg);
-		retcode = EPKG_FATAL;
+	
+	if ((retcode = sql_exec(sqlite, initsql)) != EPKG_OK)
 		goto cleanup;
-	}
 
-	if (sqlite3_exec(sqlite, "BEGIN TRANSACTION;", NULL, NULL, &errmsg) !=
-		SQLITE_OK) {
-		pkg_emit_error("sqlite: %s", errmsg);
-		retcode = EPKG_FATAL;
+	if ((retcode = sql_exec(sqlite, "BEGIN TRANSACTION;")) != EPKG_OK)
 		goto cleanup;
-	}
 
 	if (sqlite3_prepare_v2(sqlite, pkgsql, -1, &stmt_pkg, NULL) != SQLITE_OK) {
 		ERROR_SQLITE(sqlite);
@@ -594,11 +596,10 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 		while (pkg_path[0] == '/' )
 			pkg_path++;
 
-		if (pkg_open(&pkg, ent->fts_accpath) != EPKG_OK) {
+		if (pkg_open(&pkg, ent->fts_accpath, manifest) != EPKG_OK) {
 			retcode = EPKG_WARN;
 			continue;
 		}
-
 		if (progress != NULL)
 			progress(pkg, data);
 
@@ -737,6 +738,8 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 
 	if (errmsg != NULL)
 		sqlite3_free(errmsg);
+
+	sbuf_delete(manifest);
 
 	sqlite3_shutdown();
 

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sysexits.h>
 #include <unistd.h>
+#include <libutil.h>
 
 #include <pkg.h>
 
@@ -29,10 +30,13 @@ exec_install(int argc, char **argv)
 	struct pkg_jobs *jobs = NULL;
 	const char *reponame = NULL;
 	int retcode = 1;
-	int i, ch, yes = 0;
+	int ch, yes = 0;
+	int64_t dlsize = 0;
+	int64_t oldsize = 0, newsize = 0;
+	char size[7];
 	match_t match = MATCH_EXACT;
 
-	while ((ch = getopt(argc, argv, "ygxXfr:")) != -1) {
+	while ((ch = getopt(argc, argv, "ygxXr:")) != -1) {
 		switch (ch) {
 			case 'y':
 				yes = 1;
@@ -75,29 +79,47 @@ exec_install(int argc, char **argv)
 		goto cleanup;
 	}
 
-	for (i = 0; i < argc; i++) {
-		if ((it = pkgdb_rquery(db, argv[i], match, FIELD_NAME, reponame)) == NULL) {
-			goto cleanup;
-		}
+	if ((it = pkgdb_query_installs(db, match, argc, argv)) == NULL)
+		goto cleanup;
 
-		while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS) == EPKG_OK) {
-			pkg_jobs_add(jobs, pkg);
-			pkg = NULL;
-		}
-		
-		pkgdb_it_free(it);
+	while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS) == EPKG_OK) {
+		pkg_jobs_add(jobs, pkg);
+		pkg = NULL;
 	}
 
-	if (pkg_jobs_isempty(jobs))
+	if (pkg_jobs_isempty(jobs)) {
+		printf("Nothing to do\n");
+		retcode = 0;
 		goto cleanup;
+	}
 
 	/* print a summary before applying the jobs */
 	pkg = NULL;
 	printf("The following packages will be installed:\n");
 
-	while (pkg_jobs(jobs, &pkg) == EPKG_OK)
-		printf("\t%s-%s\n", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
+	while (pkg_jobs(jobs, &pkg) == EPKG_OK) {
+		dlsize += pkg_new_pkgsize(pkg);
+		if (pkg_get(pkg, PKG_NEWVERSION) != NULL) {
+			printf("\tUpgrading %s: %s -> %s\n", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION), pkg_get(pkg,PKG_NEWVERSION));
+			oldsize += pkg_flatsize(pkg);
+			newsize += pkg_new_flatsize(pkg);
+		} else {
+			newsize += pkg_flatsize(pkg);
+			printf("\tInstalling %s: %s\n", pkg_get(pkg, PKG_NAME), pkg_get(pkg, PKG_VERSION));
+		}
+	}
 
+	if (oldsize > newsize) {
+		newsize *= -1;
+		humanize_number(size, sizeof(size), oldsize - newsize, "B", HN_AUTOSCALE, 0);
+		printf("\nthe installation will save %s\n", size);
+	} else {
+		humanize_number(size, sizeof(size), newsize - oldsize, "B", HN_AUTOSCALE, 0);
+		printf("\nthe installation will require %s more space\n", size);
+	}
+	humanize_number(size, sizeof(size), dlsize, "B", HN_AUTOSCALE, 0);
+	printf("%s to be downloaded\n", size);
+ 
 	if (yes == 0)
 		yes = query_yesno("\nProceed with installing packages [y/N]: ");
 

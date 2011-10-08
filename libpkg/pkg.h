@@ -1,9 +1,10 @@
 #ifndef _PKG_H
 #define _PKG_H
 
+#include <sys/types.h>
 #include <stdarg.h>
 #include <stdbool.h>
-#include <sys/types.h>
+#include <sys/sbuf.h>
 #include <openssl/pem.h>
 
 struct pkg;
@@ -107,10 +108,6 @@ typedef enum {
 	 * The pkg refers to a localy installed package.
 	 */
 	PKG_INSTALLED = 1 << 2,
-	/**
-	 * A package to be upgraded.
-	 */
-	PKG_UPGRADE = 1 << 3,
 } pkg_t;
 
 /**
@@ -228,7 +225,7 @@ int pkg_isvalid(struct pkg *);
  * NULL pointer, the function allocate a new pkg using pkg_new().
  * @param path The path to the local package archive.
  */
-int pkg_open(struct pkg **p, const char *path);
+int pkg_open(struct pkg **p, const char *path, struct sbuf *mbuf);
 
 /**
  * @return the type of the package.
@@ -249,12 +246,12 @@ const char *pkg_get(struct pkg const * const , const pkg_attr);
 int64_t pkg_flatsize(struct pkg *);
 
 /**
- * @return the size of the uncompressed new package (PKG_UPGRADE).
+ * @return the size of the uncompressed new package (PKG_REMOTE).
  */
 int64_t pkg_new_flatsize(struct pkg *);
 
 /**
- * @return the size of the compressed new package (PKG_UPGRADE).
+ * @return the size of the compressed new package (PKG_REMOTE).
  */
 int64_t pkg_new_pkgsize(struct pkg *);
 
@@ -592,6 +589,7 @@ struct pkgdb_it * pkgdb_rquery(struct pkgdb *db, const char *pattern,
 /**
  * 
  */
+struct pkgdb_it *pkgdb_query_installs(struct pkgdb *db, match_t type, int nbpkgs, char **pkgs);
 struct pkgdb_it *pkgdb_query_upgrades(struct pkgdb *db);
 struct pkgdb_it *pkgdb_query_downgrades(struct pkgdb *db);
 struct pkgdb_it *pkgdb_query_autoremove(struct pkgdb *db);
@@ -720,8 +718,6 @@ int pkg_create_fakeroot(const char *, pkg_formats, const char *, const char *);
  */
 int pkg_delete(struct pkg *pkg, struct pkgdb *db, int force);
 int pkg_delete2(struct pkg *pkg, struct pkgdb *db, int force, int upgrade);
-
-int pkg_upgrade(struct pkgdb *db, struct pkg *pkg, const char *path);
 
 int pkg_repo_fetch(struct pkg *pkg);
 int pkg_repo_verify(const char *path, unsigned char *sig, unsigned int sig_len);
