@@ -589,7 +589,7 @@ struct pkgdb_it * pkgdb_rquery(struct pkgdb *db, const char *pattern,
 /**
  * 
  */
-struct pkgdb_it *pkgdb_query_installs(struct pkgdb *db, match_t type, int nbpkgs, char **pkgs);
+struct pkgdb_it *pkgdb_query_installs(struct pkgdb *db, match_t type, int nbpkgs, char **pkgs, const char *reponame);
 struct pkgdb_it *pkgdb_query_upgrades(struct pkgdb *db);
 struct pkgdb_it *pkgdb_query_downgrades(struct pkgdb *db);
 struct pkgdb_it *pkgdb_query_autoremove(struct pkgdb *db);
@@ -796,6 +796,14 @@ int pkg_repos_switch_reset(struct pkg_repos *repos);
  * @param repos A valid repository object as returned by pkg_repos_new()
  */
 void pkg_repos_free(struct pkg_repos *repos);
+
+/**
+ * Check if an attached repository exists
+ * @param repos A valid repository object as returned by pkg_repos_new()
+ * @param reponame The name of the repository to be checked
+ * @return EPKG_OK if repository exists and EPKG_FATAL otherwise
+ */
+int pkg_repos_exists(struct pkg_repos *repos, const char *reponame);
 
 /**
  * Returns the name associated with a repository entry

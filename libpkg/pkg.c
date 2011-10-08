@@ -34,6 +34,8 @@ static struct _fields {
 	[PKG_REPOPATH] = {PKG_REMOTE, 0},
 	[PKG_CKSUM] = {PKG_REMOTE, 0},
 	[PKG_NEWVERSION] = {PKG_REMOTE, 1},
+	[PKG_REPONAME] = {PKG_REMOTE, 1},
+	[PKG_REPOURL] = {PKG_REMOTE, 1},
 };
 
 int

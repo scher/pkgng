@@ -1904,35 +1904,72 @@ create_temporary_pkgjobs(sqlite3 *s)
 			"comment TEXT, desc TEXT, message TEXT, "
 			"arch TEXT, osversion TEXT, maintainer TEXT, "
 			"www TEXT, prefix TEXT, flatsize INTEGER, newversion TEXT, "
-			"newflatsize INTEGER, pkgsize INTEGER, cksum TEXT, repopath TEXT, automatic INTEGER);");
+			"newflatsize INTEGER, pkgsize INTEGER, cksum TEXT, repopath TEXT, automatic INTEGER, "
+			"dbname TEXT);");
 
 	return (ret);
 }
 
 struct pkgdb_it *
-pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs)
+pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, const char *repo)
 {
-	sqlite3_stmt *stmt = NULL;;
+	struct pkg_repos *repos = NULL;
+	sqlite3_stmt *stmt = NULL;
 	int i = 0;
 	struct sbuf *sql = sbuf_new_auto();
+	char tmpbuf[BUFSIZ];
 	const char *how = NULL;
+	const char *reponame = NULL;
 
-	const char finalsql[] = "select pkgid as rowid, origin, name, version, "
+	const char finalsql[] = "select pkgid AS rowid, origin, name, version, "
 		"comment, desc, message, arch, osversion, maintainer, "
 		"www, prefix, flatsize, newversion, newflatsize, pkgsize, "
-		"cksum, repopath, automatic FROM pkgjobs;";
+		"cksum, repopath, automatic, dbname FROM pkgjobs;";
+
+	const char main_sql[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
+			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
+			"cksum, repopath, automatic, dbname) "
+			"SELECT id, origin, name, version, comment, desc, "
+			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
+			"cksum, path, 0, '%s' AS dbname FROM '%s'.packages WHERE ";
+
+	const char deps_sql[] = "INSERT INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
+				"osversion, maintainer, www, prefix, flatsize, pkgsize, "
+				"cksum, repopath, automatic) "
+				"SELECT DISTINCT r.id, r.origin, r.name, r.version, r.comment, r.desc, "
+				"r.arch, r.osversion, r.maintainer, r.www, r.prefix, r.flatsize, r.pkgsize, "
+				"r.cksum, r.path, 1 "
+				"from '%s'.packages AS r where r.origin IN "
+				"(SELECT d.origin from '%s'.deps AS d, pkgjobs as j WHERE d.package_id = j.pkgid) "
+				"AND (SELECT origin from main.packages WHERE origin=r.origin AND version=r.version) IS NULL;";
 
 	if (db->type != PKGDB_REMOTE) {
 		pkg_emit_error("remote database not attached (misuse)");
 		return (NULL);
 	}
 
-	sbuf_cat(sql, "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
-			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
-			"cksum, repopath, automatic) "
-			"SELECT id, origin, name, version, comment, desc, "
-			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
-			"cksum, path, 0 FROM remote.packages WHERE ");
+	/* TODO: check for MULTI_REPOS=true */
+	if (repo != NULL) {	
+		if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
+			pkg_emit_error("cannot get the attached databases");
+			return (NULL);
+		}
+
+		if (pkg_repos_exists(repos, repo) != EPKG_OK) {
+			pkg_emit_error("repository %s does not exist", repo);
+			pkg_repos_free(repos);
+			return (NULL);
+		}
+
+		reponame = repo;
+		pkg_repos_free(repos);
+	} else {
+		/* default repository is 'remote' */
+		reponame = "remote";
+	}
+
+	snprintf(tmpbuf, sizeof(tmpbuf), main_sql, reponame, reponame);
+	sbuf_cat(sql, tmpbuf);
 
 	switch (match) {
 		case MATCH_ALL:
@@ -1976,16 +2013,9 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs)
 	sql_exec(db->sqlite, "delete from pkgjobs where (select origin from main.packages where origin=pkgjobs.origin and version=pkgjobs.version) IS NOT NULL;");
 
 	/* Append dependencies */
+	snprintf(tmpbuf, sizeof(tmpbuf), deps_sql, reponame, reponame);
 	do {
-		sql_exec(db->sqlite, "INSERT INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
-				"osversion, maintainer, www, prefix, flatsize, pkgsize, "
-				"cksum, repopath, automatic) "
-				"SELECT DISTINCT r.id, r.origin, r.name, r.version, r.comment, r.desc, "
-				"r.arch, r.osversion, r.maintainer, r.www, r.prefix, r.flatsize, r.pkgsize, "
-				"r.cksum, r.path, 1 "
-				"from remote.packages AS r where r.origin IN "
-				"(SELECT d.origin from remote.deps AS d, pkgjobs as j WHERE d.package_id = j.pkgid) "
-				"AND (SELECT origin from main.packages WHERE origin=r.origin AND version=r.version) IS NULL;");
+		sql_exec(db->sqlite, tmpbuf);
 	} while (sqlite3_changes(db->sqlite) != 0);
 
 	sbuf_delete(sql);

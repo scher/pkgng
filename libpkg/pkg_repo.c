@@ -9,6 +9,7 @@
 #include <libgen.h>
 #include <sqlite3.h>
 #include <string.h>
+#include <stdbool.h>
 #include <unistd.h>
 
 #include <openssl/err.h>
@@ -297,6 +298,22 @@ pkg_repos_get_line(struct pkg_repos_entry *re)
         return(re->line);
 }
 
+int
+pkg_repos_exists(struct pkg_repos *repos, const char *reponame)
+{
+	struct pkg_repos_entry *re = NULL;
+	bool exists = false;
+
+	while (pkg_repos_next(repos, &re) == EPKG_OK) {
+		if (strcmp(pkg_repos_get_name(re), reponame) == 0) {
+			exists = true;
+			break;
+		}
+	}
+
+	return (exists == true ? EPKG_OK : EPKG_FATAL);
+}
+	
 void
 pkg_repos_free(struct pkg_repos *repos)
 {

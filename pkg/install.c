@@ -79,7 +79,7 @@ exec_install(int argc, char **argv)
 		goto cleanup;
 	}
 
-	if ((it = pkgdb_query_installs(db, match, argc, argv)) == NULL)
+	if ((it = pkgdb_query_installs(db, match, argc, argv, reponame)) == NULL)
 		goto cleanup;
 
 	while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_DEPS) == EPKG_OK) {
