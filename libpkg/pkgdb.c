@@ -487,7 +487,6 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	char tmpbuf[BUFSIZ];
 	struct sbuf *sql = NULL;
 	bool create = false;
-	bool def_repo = false; /* default repo flag for multi-repos */
 
 	/*
 	 * Set the pointer to NULL now. Change it to the real pointer just
@@ -598,7 +597,6 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 
 				/* search for the default repo and attach it as 'remote' */
 				if (strcmp(repo_name, "default") == 0) {
-					def_repo = true;
 					repo_name = "remote";
 				}
 
@@ -608,8 +606,11 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 
 			sbuf_finish(sql);
 
-			/* check if a default repo is defined */
-			if (def_repo == false) {
+			/* 
+			 * Check if a default repo is defined.
+			 * NOTE: The default repository is attached as 'remote'
+			 */
+			if (pkg_repos_exists(repos, "remote")) {
 				pkg_emit_error("no default repository defined");
 				pkgdb_close(db);
 				sbuf_delete(sql);
