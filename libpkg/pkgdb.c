@@ -625,7 +625,6 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 				return (EPKG_FATAL);
 			}
 
-			sbuf_delete(sql);
 			pkg_repos_free(repos);
 		} else {
 			/*
@@ -647,11 +646,10 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 				pkgdb_close(db);
 				return (EPKG_FATAL);
 			}
-
-			sbuf_delete(sql);
 		}
 	}
 
+	sbuf_delete(sql);
 	*db_p = db;
 	return (EPKG_OK);
 }
