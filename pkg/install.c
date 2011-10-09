@@ -17,7 +17,7 @@
 void
 usage_install(void)
 {
-	fprintf(stderr, "usage: pkg install [-r reponame] [-ygxXf] <pkg-name> <...>\n\n");
+	fprintf(stderr, "usage: pkg install [-r reponame] [-ygxX] <pkg-name> <...>\n\n");
 	fprintf(stderr, "For more information see 'pkg help install'.\n");
 }
 
@@ -131,6 +131,7 @@ exec_install(int argc, char **argv)
 
 	cleanup:
 	pkg_jobs_free(jobs);
+	pkgdb_it_free(it);
 	pkgdb_close(db);
 
 	return (retcode);
