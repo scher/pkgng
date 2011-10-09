@@ -2112,12 +2112,14 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 		if (repo != NULL) {
 			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
 				pkg_emit_error("cannot get the attached databases");
+				sbuf_delete(sql);
 				return (NULL);
 			}
 
 			if (pkg_repos_exists(repos, repo) != EPKG_OK) {
 				pkg_emit_error("repository '%s' does not exists", repo);
 				pkg_repos_free(repos);
+				sbuf_delete(sql);
 				return (NULL);
 			}
 
