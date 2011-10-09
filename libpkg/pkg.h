@@ -590,8 +590,8 @@ struct pkgdb_it * pkgdb_rquery(struct pkgdb *db, const char *pattern,
  * 
  */
 struct pkgdb_it *pkgdb_query_installs(struct pkgdb *db, match_t type, int nbpkgs, char **pkgs, const char *reponame);
-struct pkgdb_it *pkgdb_query_upgrades(struct pkgdb *db);
-struct pkgdb_it *pkgdb_query_downgrades(struct pkgdb *db);
+struct pkgdb_it *pkgdb_query_upgrades(struct pkgdb *db, const char *reponame);
+struct pkgdb_it *pkgdb_query_downgrades(struct pkgdb *db, const char *reponame);
 struct pkgdb_it *pkgdb_query_autoremove(struct pkgdb *db);
 
 /**

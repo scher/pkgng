@@ -65,7 +65,7 @@ exec_upgrade(int argc, char **argv)
 		goto cleanup;
 	}
 
-	if ((it = pkgdb_query_upgrades(db)) == NULL) {
+	if ((it = pkgdb_query_upgrades(db, NULL)) == NULL) {
 		goto cleanup;
 	}
 
