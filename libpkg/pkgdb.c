@@ -2105,8 +2105,6 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 			"deps.origin NOT IN (SELECT DISTINCT origin from pkgjobs) AND deps.origin NOT IN (SELECT DISTINCT origin from main.packages)"
 			");";
 
-	create_temporary_pkgjobs(db->sqlite);
-
 	/* Working on multiple repositories */
 	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
 		if (repo != NULL) {
@@ -2133,6 +2131,8 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 		/* default repository in single-repo is 'remote' */
 		reponame = "remote";
 	}
+
+	create_temporary_pkgjobs(db->sqlite);
 
 	sbuf_printf(sql, pkgjobs_sql_1, reponame, reponame);
 	sql_exec(db->sqlite, sbuf_get(sql));
