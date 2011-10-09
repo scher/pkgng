@@ -112,11 +112,18 @@ exec_update(int argc, char **argv)
 	}
 
 	/* 
-	 * If PACKAGESITE is defined fetch only the remote
-	 * database to which PACKAGESITE refers, otherwise
-	 * fetch all remote databases found in the configuration file.
+	 * Fetch remote databases.
 	 */
-	if ((packagesite = pkg_config("PACKAGESITE")) != NULL) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") != 0) {
+		/*
+		 * Single remote database
+		 */
+
+		if ((packagesite = pkg_config("PACKAGESITE")) == NULL) {
+			warnx("PACKAGESITE is not defined.");
+			return (1);
+		}
+
 		if (packagesite[strlen(packagesite) - 1] == '/')
 			snprintf(url, MAXPATHLEN, "%srepo.txz", packagesite);
 		else
@@ -125,10 +132,12 @@ exec_update(int argc, char **argv)
 		retcode = update_from_remote_repo("repo", url);
 	} else {
 		if (pkg_repos_new(&repos) != EPKG_OK)
-			return (EPKG_FATAL);
+			return (1);
 
-		if (pkg_repos_load(repos) != EPKG_OK)
-			return (EPKG_FATAL);
+		if (pkg_repos_load(repos) != EPKG_OK) {
+			pkg_repos_free(repos);
+			return (1);
+		}
 
 		while (pkg_repos_next(repos, &re) == EPKG_OK) {
 			packagesite = pkg_repos_get_url(re);

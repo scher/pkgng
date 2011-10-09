@@ -87,13 +87,21 @@ pkg_repo_fetch(struct pkg *pkg)
 	if ((retcode = mkdirs(path)) != 0)
 		goto cleanup;
 
-	if ((packagesite = pkg_config("PACKAGESITE")) == NULL) {
-		/* 
-		 * PACKAGESITE is not set
-		 * Get the URL from the package itself
-		 */
-	
+	/* 
+	 * In multi-repos the remote URL is stored in pkg[PKG_REPOURL]
+	 * For a single attached database the repository URL should be
+	 * defined by PACKAGESITE.
+	 */
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
 		packagesite = pkg_get(pkg, PKG_REPOURL);
+	} else {
+		packagesite = pkg_config("PACKAGESITE");
+	}
+
+	if (packagesite == NULL) {
+		pkg_emit_error("PACKAGESITE is not defined");
+		retcode = 1;
+		goto cleanup;
 	}
 
 	if (packagesite[strlen(packagesite) - 1] == '/')

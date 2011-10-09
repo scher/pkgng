@@ -561,7 +561,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	}
 
 	if (type == PKGDB_REMOTE) {
-		if (pkg_config("PACKAGESITE") == NULL) {
+		if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
 			fprintf(stderr, "\t/!\\		   WARNING WARNING WARNING		/!\\\n");
 			fprintf(stderr, "\t/!\\	     WORKING ON MULTIPLE REPOSITORIES		/!\\\n");
 			fprintf(stderr, "\t/!\\  THIS FEATURE IS STILL CONSIDERED EXPERIMENTAL	/!\\\n");
@@ -665,7 +665,7 @@ pkgdb_close(struct pkgdb *db)
 
 	if (db->sqlite != NULL) {
 		if (db->type == PKGDB_REMOTE) {
-			if (pkg_config("PACKAGESITE") == NULL) {
+			if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
 				/*
 				 * Working on multiple remote repositories.
 				 * Detach the remote repositories from the main database
@@ -1949,21 +1949,23 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 		return (NULL);
 	}
 
-	/* TODO: check for MULTI_REPOS=true */
-	if (repo != NULL) {	
-		if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
-			pkg_emit_error("cannot get the attached databases");
-			return (NULL);
-		}
+	/* Working on multiple repositories */
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+		if (repo != NULL) {
+			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
+				pkg_emit_error("cannot get the attached databases");
+				return (NULL);
+			}
 
-		if (pkg_repos_exists(repos, repo) != EPKG_OK) {
-			pkg_emit_error("repository %s does not exist", repo);
+			if (pkg_repos_exists(repos, repo) != EPKG_OK) {
+				pkg_emit_error("repository %s does not exist", repo);
+				pkg_repos_free(repos);
+				return (NULL);
+			}
+
+			reponame = repo;
 			pkg_repos_free(repos);
-			return (NULL);
 		}
-
-		reponame = repo;
-		pkg_repos_free(repos);
 	} else {
 		/* default repository is 'remote' */
 		reponame = "remote";
@@ -2228,7 +2230,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	sql = sbuf_new_auto();
 	sbuf_cat(sql, basesql);
 
-	if (pkg_config("PACKAGESITE") == NULL) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
 		/*
 		 * Working on multiple remote repositories
 		 */
