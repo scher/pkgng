@@ -2181,7 +2181,6 @@ pkgdb_query_downgrades(struct pkgdb *db, const char *repo)
 		ERROR_SQLITE(db->sqlite);
 		return (NULL);
 	}
-					sbuf_cat(sql, tmpbuf);
 
 	return (pkgdb_it_new(db, stmt, PKG_REMOTE));
 }
@@ -2345,7 +2344,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 		 * Working on a single remote repository
 		 */
 
-		sbuf_cat(sql, "FROM remote.packages WHERE ");
+		sbuf_cat(sql, ", 'remote' AS dbname FROM remote.packages WHERE ");
 		pkgdb_rquery_build_search_query(sql, match, field);
 		sbuf_cat(sql, ";");
 		sbuf_finish(sql);
