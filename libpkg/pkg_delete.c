@@ -13,13 +13,7 @@
 #include "pkg_util.h"
 
 int
-pkg_delete(struct pkg *pkg, struct pkgdb *db, int force)
-{
-	return (pkg_delete2(pkg, db, force, 0));
-}
-
-int
-pkg_delete2(struct pkg *pkg, struct pkgdb *db, int force, int upgrade)
+pkg_delete(struct pkg *pkg, struct pkgdb *db, int flags)
 {
 	struct pkg_dep *rdep = NULL;
 	int ret;
@@ -36,30 +30,30 @@ pkg_delete2(struct pkg *pkg, struct pkgdb *db, int force, int upgrade)
 	/*
 	 * Ensure that we have all the informations we need
 	 */
-	if ((ret = pkgdb_loadrdeps(db, pkg)) != EPKG_OK)
+	if ((ret = pkgdb_load_rdeps(db, pkg)) != EPKG_OK)
 		return (ret);
-	if ((ret = pkgdb_loadfiles(db, pkg)) != EPKG_OK)
+	if ((ret = pkgdb_load_files(db, pkg)) != EPKG_OK)
 		return (ret);
-	if ((ret = pkgdb_loaddirs(db, pkg)) != EPKG_OK)
+	if ((ret = pkgdb_load_dirs(db, pkg)) != EPKG_OK)
 		return (ret);
-	if ((ret = pkgdb_loadscripts(db, pkg)) != EPKG_OK)
+	if ((ret = pkgdb_load_scripts(db, pkg)) != EPKG_OK)
 		return (ret);
-	if ((ret = pkgdb_loadmtree(db, pkg)) != EPKG_OK)
+	if ((ret = pkgdb_load_mtree(db, pkg)) != EPKG_OK)
 		return (ret);
 
-	if (!upgrade)
-		pkg_emit_deinstall_begin(pkg);
-	else
+	if (flags & PKG_DELETE_UPGRADE)
 		pkg_emit_upgrade_begin(pkg);
+	else
+		pkg_emit_deinstall_begin(pkg);
 
 	/* If there are dependencies */
 	if (pkg_rdeps(pkg, &rdep) == EPKG_OK) {
-		pkg_emit_required(pkg, force);
-		if (!force)
+		pkg_emit_required(pkg, flags & PKG_DELETE_FORCE);
+		if (flags ^ PKG_DELETE_FORCE)
 			return (EPKG_REQUIRED);
 	}
 
-	if (upgrade) {
+	if (flags & PKG_DELETE_UPGRADE) {
 		if (( ret = pkg_script_run(pkg, PKG_SCRIPT_PRE_UPGRADE)) != EPKG_OK )
 			return (ret);
 	} else {
@@ -67,17 +61,17 @@ pkg_delete2(struct pkg *pkg, struct pkgdb *db, int force, int upgrade)
 			return (ret);
 	}
 
-	if ((ret = pkg_delete_files(pkg, force)) != EPKG_OK)
+	if ((ret = pkg_delete_files(pkg, flags & PKG_DELETE_FORCE)) != EPKG_OK)
 		return (ret);
 
-	if (!upgrade)
+	if (flags ^ PKG_DELETE_UPGRADE)
 		if ((ret = pkg_script_run(pkg, PKG_SCRIPT_POST_DEINSTALL)) != EPKG_OK)
 			return (ret);
 
-	if ((ret = pkg_delete_dirs(db, pkg, force)) != EPKG_OK)
+	if ((ret = pkg_delete_dirs(db, pkg, flags & PKG_DELETE_FORCE)) != EPKG_OK)
 		return (ret);
 
-	if (!upgrade)
+	if (flags ^ PKG_DELETE_UPGRADE)
 		pkg_emit_deinstall_finished(pkg);
 
 	return (pkgdb_unregister_pkg(db, pkg_get(pkg, PKG_ORIGIN)));
@@ -91,6 +85,9 @@ pkg_delete_files(struct pkg *pkg, int force)
 	const char *path;
 
 	while (pkg_files(pkg, &file) == EPKG_OK) {
+		if (file->keep == 1)
+			continue;
+
 		path = pkg_file_path(file);
 
 		/* Regular files and links */
@@ -122,6 +119,9 @@ pkg_delete_dirs(struct pkgdb *db, struct pkg *pkg, int force)
 	int64_t nbpackage;
 
 	while (pkg_dirs(pkg, &dir) == EPKG_OK) {
+		if (dir->keep == 1)
+			continue;
+
 		nbpackage = 0;
 
 		if (pkgdb_is_dir_used(db, pkg_dir_path(dir), &nbpackage) != EPKG_OK)

@@ -217,7 +217,7 @@ void pkg_free(struct pkg *);
 /**
  * Check if a package is valid according to its type.
  */
-int pkg_isvalid(struct pkg *);
+int pkg_is_valid(struct pkg *);
 
 /**
  * Open a package file archive and retrive informations.
@@ -255,7 +255,7 @@ int64_t pkg_new_flatsize(struct pkg *);
  */
 int64_t pkg_new_pkgsize(struct pkg *);
 
-int pkg_list_isempty(struct pkg *, pkg_list);
+int pkg_list_is_empty(struct pkg *, pkg_list);
 /**
  * Iterates over the dependencies of the package.
  * @param dep Must be set to NULL for the first call.
@@ -343,15 +343,15 @@ int pkg_analyse_files(struct pkgdb *, struct pkg *);
  * Generic setter for simple attributes.
  */
 int pkg_set(struct pkg *pkg, pkg_attr attr, const char *value);
-int pkg_setmtree(struct pkg *pkg, const char *value);
+int pkg_set_mtree(struct pkg *pkg, const char *value);
 
 /**
  * Read the content of a file into a buffer, then call pkg_set().
  */
 int pkg_set_from_file(struct pkg *pkg, pkg_attr attr, const char *file);
 
-int pkg_setautomatic(struct pkg *pkg);
-int pkg_isautomatic(struct pkg *pkg);
+int pkg_set_automatic(struct pkg *pkg);
+int pkg_is_automatic(struct pkg *pkg);
 
 /**
  * set the logic for license combinaison
@@ -367,19 +367,19 @@ lic_t pkg_licenselogic(struct pkg *pkg);
  * Set the uncompressed size of the package.
  * @return An error code.
  */
-int pkg_setflatsize(struct pkg *pkg, int64_t size);
+int pkg_set_flatsize(struct pkg *pkg, int64_t size);
 
 /**
  * Set the uncompressed size of the package, in its futur version.
  * @return An error code.
  */
-int pkg_setnewflatsize(struct pkg *pkg, int64_t size);
+int pkg_set_newflatsize(struct pkg *pkg, int64_t size);
 
 /**
  * Set the compressed size of the package, in its futur version.
  * @return An error code.
  */
-int pkg_setnewpkgsize(struct pkg *pkg, int64_t size);
+int pkg_set_newpkgsize(struct pkg *pkg, int64_t size);
 
 /**
  * Allocate a new struct pkg and add it to the deps of pkg.
@@ -560,10 +560,10 @@ int pkgdb_has_flag(struct pkgdb *db, int flag);
 #define	PKGDB_FLAG_IN_FLIGHT	(1 << 0)
 
 /**
- * Register a package to the database.
+ * register a package to the database.
  * @return An error code.
  */
-int pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete);
 
 /**
  * Complete an in-flight package registration command.
@@ -592,6 +592,7 @@ struct pkgdb_it * pkgdb_rquery(struct pkgdb *db, const char *pattern,
 struct pkgdb_it *pkgdb_query_installs(struct pkgdb *db, match_t type, int nbpkgs, char **pkgs, const char *reponame);
 struct pkgdb_it *pkgdb_query_upgrades(struct pkgdb *db, const char *reponame);
 struct pkgdb_it *pkgdb_query_downgrades(struct pkgdb *db, const char *reponame);
+struct pkgdb_it *pkgdb_query_delete(struct pkgdb *db, match_t type, int nbpkgs, char **pkgs, int recursive);
 struct pkgdb_it *pkgdb_query_autoremove(struct pkgdb *db);
 
 /**
@@ -627,18 +628,18 @@ int pkgdb_it_next(struct pkgdb_it *, struct pkg **pkg, int flags);
  */
 void pkgdb_it_free(struct pkgdb_it *);
 
-int pkgdb_loaddeps(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadrdeps(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadconflicts(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadfiles(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loaddirs(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadscripts(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadoptions(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadmtree(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadcategory(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadlicense(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loaduser(struct pkgdb *db, struct pkg *pkg);
-int pkgdb_loadgroup(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_conflicts(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_files(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_dirs(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_scripts(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_options(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_mtree(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_category(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_license(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_user(struct pkgdb *db, struct pkg *pkg);
+int pkgdb_load_group(struct pkgdb *db, struct pkg *pkg);
 
 /**
  * Compact the database to save space.
@@ -654,8 +655,11 @@ int pkgdb_compact(struct pkgdb *db);
  * @param path The path to the package archive file on the local disk
  * @return An error code.
  */
-int pkg_add(struct pkgdb *db, const char *path);
-int pkg_add2(struct pkgdb *db, const char *path, int upgrade, int automatic);
+int pkg_add(struct pkgdb *db, const char *path, int flags);
+
+#define PKG_ADD_UPGRADE (1 << 0)
+#define PKG_ADD_UPGRADE_NEW (1 << 1)
+#define PKG_ADD_AUTOMATIC (1 << 2)
 
 /**
  * Allocate a new pkg_jobs.
@@ -678,7 +682,7 @@ int pkg_jobs_add(struct pkg_jobs *jobs, struct pkg *pkg);
 /**
  * Returns true if there are no jobs.
  */
-int pkg_jobs_isempty(struct pkg_jobs *jobs);
+int pkg_jobs_is_empty(struct pkg_jobs *jobs);
 
 /**
  * Iterates over the packages in the jobs queue.
@@ -716,8 +720,9 @@ int pkg_create_fakeroot(const char *, pkg_formats, const char *, const char *);
  * required by other packages.
  * @return An error code.
  */
-int pkg_delete(struct pkg *pkg, struct pkgdb *db, int force);
-int pkg_delete2(struct pkg *pkg, struct pkgdb *db, int force, int upgrade);
+int pkg_delete(struct pkg *pkg, struct pkgdb *db, int flags);
+#define PKG_DELETE_FORCE (1<<0)
+#define PKG_DELETE_UPGRADE (1<<1)
 
 int pkg_repo_fetch(struct pkg *pkg);
 int pkg_repo_verify(const char *path, unsigned char *sig, unsigned int sig_len);
@@ -868,6 +873,8 @@ typedef enum {
 	PKG_EVENT_UPGRADE_BEGIN,
 	PKG_EVENT_UPGRADE_FINISHED,
 	PKG_EVENT_FETCHING,
+	PKG_EVENT_INTEGRITYCHECK_BEGIN,
+	PKG_EVENT_INTEGRITYCHECK_FINISHED,
 	/* errors */
 	PKG_EVENT_ERROR,
 	PKG_EVENT_ERRNO,

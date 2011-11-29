@@ -20,7 +20,6 @@ pkg_jobs_new(struct pkg_jobs **j, pkg_jobs_t t, struct pkgdb *db)
 	}
 
 	STAILQ_INIT(&(*j)->jobs);
-	LIST_INIT(&(*j)->nodes);
 	(*j)->db = db;
 	(*j)->type = t;
 
@@ -48,7 +47,6 @@ pkg_jobs_add(struct pkg_jobs *j, struct pkg *pkg)
 {
 	assert(j != NULL);
 	assert(pkg != NULL);
-	assert(j->resolved != 1);
 
 	STAILQ_INSERT_TAIL(&j->jobs, pkg, next);
 
@@ -56,11 +54,9 @@ pkg_jobs_add(struct pkg_jobs *j, struct pkg *pkg)
 }
 
 int
-pkg_jobs_isempty(struct pkg_jobs *j)
+pkg_jobs_is_empty(struct pkg_jobs *j)
 {
 	assert(j != NULL);
-
-	pkg_jobs_resolv(j);
 
 	return (STAILQ_EMPTY(&j->jobs));
 }
@@ -69,8 +65,6 @@ int
 pkg_jobs(struct pkg_jobs *j, struct pkg **pkg)
 {
 	assert(j != NULL);
-
-	pkg_jobs_resolv(j);
 
 	if (*pkg == NULL)
 		*pkg = STAILQ_FIRST(&j->jobs);
@@ -84,11 +78,55 @@ pkg_jobs(struct pkg_jobs *j, struct pkg **pkg)
 }
 
 static int
+pkg_jobs_keep_files_to_del(struct pkg *p1, struct pkg *p2)
+{
+	struct pkg_file *f1 = NULL, *f2 = NULL;
+	struct pkg_dir *d1 = NULL, *d2 = NULL;
+
+	while (pkg_files(p1, &f1) == EPKG_OK) {
+		if (f1->keep == 1)
+			continue;
+
+		f2 = NULL;
+		while (pkg_files(p2, &f2)) {
+			if (strcmp(pkg_file_path(f1), pkg_file_path(f2)) == 0) {
+				f1->keep = 1;
+				break;
+			}
+		}
+	}
+
+	while (pkg_dirs(p1, &d1) == EPKG_OK) {
+		if (d1->keep == 1)
+			continue;
+		d2 = NULL;
+		while (pkg_dirs(p2, &d2)) {
+			if (strcmp(pkg_dir_path(d1), pkg_dir_path(d2)) == 0) {
+				d1->keep = 1;
+				break;
+			}
+		}
+	}
+
+	return (EPKG_OK);
+}
+
+static int
 pkg_jobs_install(struct pkg_jobs *j)
 {
 	struct pkg *p = NULL;
+	struct pkg *pkg = NULL;
+	struct pkg *newpkg = NULL;
+	struct pkg *pkg_temp = NULL;
+	struct pkgdb_it *it = NULL;
+	struct sbuf *buf = sbuf_new_auto();
+	STAILQ_HEAD(,pkg) pkg_queue;
 	const char *cachedir;
 	char path[MAXPATHLEN + 1];
+	int ret = EPKG_OK;
+	int flags = 0;
+
+	STAILQ_INIT(&pkg_queue);
 
 	/* Fetch */
 	while (pkg_jobs(j, &p) == EPKG_OK) {
@@ -96,22 +134,90 @@ pkg_jobs_install(struct pkg_jobs *j)
 			return (EPKG_FATAL);
 	}
 
-	/* Install */
 	cachedir = pkg_config("PKG_CACHEDIR");
 	p = NULL;
+	/* integrity checking */
+	pkg_emit_integritycheck_begin();
+
 	while (pkg_jobs(j, &p) == EPKG_OK) {
+		snprintf(path, sizeof(path), "%s/%s", cachedir,
+				pkg_get(p, PKG_REPOPATH));
+		if (pkg_open(&pkg, path, buf) != EPKG_OK)
+			return (EPKG_FATAL);
+
+		if (pkgdb_integrity_append(j->db, pkg) != EPKG_OK)
+			ret = EPKG_FATAL;
+	}
+
+	pkg_free(pkg);
+	sbuf_delete(buf);
+
+	if (pkgdb_integrity_check(j->db) != EPKG_OK || ret != EPKG_OK)
+		return (EPKG_FATAL);
+
+	pkg_emit_integritycheck_finished();
+	p = NULL;
+	/* Install */
+	sql_exec(j->db->sqlite, "SAVEPOINT upgrade;");
+	while (pkg_jobs(j, &p) == EPKG_OK) {
+		flags = 0;
+		it = pkgdb_integrity_conflict_local(j->db, pkg_get(p, PKG_ORIGIN));
+
+		if (it != NULL) {
+			pkg = NULL;
+			while (pkgdb_it_next(it, &pkg, PKG_LOAD_BASIC|PKG_LOAD_FILES|PKG_LOAD_SCRIPTS|PKG_LOAD_DIRS) == EPKG_OK) {
+				STAILQ_INSERT_TAIL(&pkg_queue, pkg, next);
+				pkg_script_run(pkg, PKG_SCRIPT_PRE_DEINSTALL);
+				pkgdb_unregister_pkg(j->db, pkg_get(pkg, PKG_ORIGIN));
+				pkg = NULL;
+			}
+			pkgdb_it_free(it);
+		}
 		snprintf(path, sizeof(path), "%s/%s", cachedir,
 				 pkg_get(p, PKG_REPOPATH));
 
+		pkg_open(&newpkg, path, NULL);
 		if (pkg_get(p, PKG_NEWVERSION) != NULL) {
-			p->type = PKG_INSTALLED;
-			if (pkg_delete2(p, j->db, 1, 0) != EPKG_OK)
-				return (EPKG_FATAL);
+			pkg_emit_upgrade_begin(p);
+		} else {
+			pkg_emit_install_begin(newpkg);
+		}
+		STAILQ_FOREACH(pkg, &pkg_queue, next)
+			pkg_jobs_keep_files_to_del(pkg, newpkg);
+
+		STAILQ_FOREACH_SAFE(pkg, &pkg_queue, next, pkg_temp) {
+			if (strcmp(pkg_get(p, PKG_ORIGIN), pkg_get(pkg, PKG_ORIGIN)) == 0) {
+				STAILQ_REMOVE(&pkg_queue, pkg, pkg, next);
+				pkg_delete_files(pkg, 1);
+				pkg_script_run(pkg, PKG_SCRIPT_POST_DEINSTALL);
+				pkg_delete_dirs(j->db, pkg, 0);
+				pkg_free(pkg);
+				break;
+			}
 		}
 
-		if (pkg_add2(j->db, path, 0, pkg_isautomatic(p)) != EPKG_OK)
+		flags |= PKG_ADD_UPGRADE;
+		if (pkg_is_automatic(p))
+			flags |= PKG_ADD_AUTOMATIC;
+
+		if (pkg_add(j->db, path, flags) != EPKG_OK) {
+			sql_exec(j->db->sqlite, "ROLLBACK TO upgrade;");
 			return (EPKG_FATAL);
+		}
+
+		if (pkg_get(p, PKG_NEWVERSION) != NULL)
+			pkg_emit_upgrade_finished(p);
+		else
+			pkg_emit_install_finished(newpkg);
+
+		if (STAILQ_EMPTY(&pkg_queue)) {
+			sql_exec(j->db->sqlite, "RELEASE upgrade;");
+			sql_exec(j->db->sqlite, "SAVEPOINT upgrade;");
+		}
 	}
+	sql_exec(j->db->sqlite, "RELEASE upgrade;");
+
+	pkg_free(newpkg);
 
 	return (EPKG_OK);
 }
@@ -123,7 +229,10 @@ pkg_jobs_deinstall(struct pkg_jobs *j, int force)
 	int retcode;
 
 	while (pkg_jobs(j, &p) == EPKG_OK) {
-		retcode = pkg_delete(p, j->db, force);
+		if (force)
+			retcode = pkg_delete(p, j->db, PKG_DELETE_FORCE);
+		else
+			retcode = pkg_delete(p, j->db, 0);
 		if (retcode != EPKG_OK)
 			return (retcode);
 	}
@@ -141,126 +250,4 @@ pkg_jobs_apply(struct pkg_jobs *j, int force)
 
 	pkg_emit_error("bad jobs argument");
 	return (EPKG_FATAL);
-}
-
-static struct pkg_jobs_node *
-get_node(struct pkg_jobs *j, const char *name, int create)
-{
-	struct pkg_jobs_node *n;
-
-	/* XXX hashmap? */
-	LIST_FOREACH(n, &j->nodes, entries) {
-		if (strcmp(name, pkg_get(n->pkg, PKG_ORIGIN)) == 0) {
-			return (n);
-		}
-	}
-
-	if (create == 0)
-		return (NULL);
-
-	if ((n = calloc(1, sizeof(struct pkg_jobs_node))) == NULL) {
-		pkg_emit_errno("calloc", "pkg_jobs_node");
-		return (NULL);
-	}
-
-	LIST_INSERT_HEAD(&j->nodes, n, entries);
-	return (n);
-}
-
-static void
-add_parent(struct pkg_jobs_node *n, struct pkg_jobs_node *p)
-{
-		p->nrefs++;
-
-		if (n->parents_len == n->parents_cap) {
-			if (n->parents_cap == 0)
-				n->parents_cap = 5;
-			else
-				n->parents_cap *= 2;
-			if ((n->parents = reallocf(n->parents,
-					n->parents_cap * sizeof(struct pkg_jobs_node))) == NULL) {
-					pkg_emit_errno("realloc", "pkg_jobs_node");
-					return;
-			}
-		}
-		n->parents[n->parents_len] = p;
-		n->parents_len++;
-}
-
-static void
-add_rdep(struct pkg_jobs *j, struct pkg_jobs_node *n)
-{
-	struct pkg_jobs_node *nrdep;
-	struct pkg_dep *rdep = NULL;
-
-	pkgdb_loadrdeps(j->db, n->pkg);
-
-	while (pkg_rdeps(n->pkg, &rdep) == EPKG_OK) {
-		nrdep = get_node(j, pkg_dep_origin(rdep), 0);
-		if (nrdep != NULL)
-			add_parent(nrdep, n);
-	}
-}
-
-static void
-remove_node(struct pkg_jobs *j, struct pkg_jobs_node *n)
-{
-	struct pkg_jobs_node *np;
-	size_t i;
-
-	assert(n->nrefs == 0);
-
-	STAILQ_INSERT_TAIL(&j->jobs, n->pkg, next);
-
-	LIST_REMOVE(n, entries);
-
-	for (i = 0; i < n->parents_len; i++) {
-		np = n->parents[i];
-		np->nrefs--;
-	}
-	free(n->parents);
-	free(n);
-}
-
-int
-pkg_jobs_resolv(struct pkg_jobs *j)
-{
-	struct pkg_jobs_node *n, *tmp;
-	struct pkg *p;
-
-	assert(j != NULL);
-
-	if (j->resolved == 1)
-		return (EPKG_OK);
-
-	/* Create nodes and remove jobs form the queue */
-	while (!STAILQ_EMPTY(&j->jobs)) {
-		p = STAILQ_FIRST(&j->jobs);
-		STAILQ_REMOVE_HEAD(&j->jobs, next);
-
-		n = get_node(j, pkg_get(p, PKG_ORIGIN), 1);
-
-		if (n->pkg == NULL)
-			n->pkg = p;
-		else
-			pkg_free(p);
-	}
-
-	/* Add dependencies into nodes */
-	LIST_FOREACH(n, &j->nodes, entries) {
-		if (j->type == PKG_JOBS_DEINSTALL)
-			add_rdep(j, n);
-	}
-
-	/* Resolv !*/
-	do {
-		LIST_FOREACH_SAFE(n, &j->nodes, entries, tmp) {
-			if (n->nrefs == 0)
-				remove_node(j, n);
-		}
-	} while (!LIST_EMPTY(&j->nodes));
-
-	j->resolved = 1;
-
-	return (EPKG_OK);
 }

@@ -131,7 +131,7 @@ pkg_type(struct pkg const * const pkg)
 }
 
 int
-pkg_isvalid(struct pkg *pkg)
+pkg_is_valid(struct pkg *pkg)
 {
 	int ret = EPKG_OK;
 	int i;
@@ -198,7 +198,7 @@ pkg_set(struct pkg * pkg, pkg_attr attr, const char *value)
 }
 
 int
-pkg_setmtree(struct pkg *pkg, const char *mtree) {
+pkg_set_mtree(struct pkg *pkg, const char *mtree) {
 	return (pkg_set(pkg, PKG_MTREE, mtree));
 }
 
@@ -231,7 +231,7 @@ pkg_flatsize(struct pkg *pkg)
 }
 
 int
-pkg_setautomatic(struct pkg *pkg)
+pkg_set_automatic(struct pkg *pkg)
 {
 	assert(pkg != NULL);
 
@@ -241,7 +241,7 @@ pkg_setautomatic(struct pkg *pkg)
 }
 
 int
-pkg_isautomatic(struct pkg *pkg)
+pkg_is_automatic(struct pkg *pkg)
 {
 	assert(pkg != NULL);
 
@@ -265,7 +265,7 @@ pkg_new_pkgsize(struct pkg *pkg)
 }
 
 int
-pkg_setflatsize(struct pkg *pkg, int64_t size)
+pkg_set_flatsize(struct pkg *pkg, int64_t size)
 {
 	assert(pkg != NULL);
 	assert(size >= 0);
@@ -275,7 +275,7 @@ pkg_setflatsize(struct pkg *pkg, int64_t size)
 }
 
 int
-pkg_setnewflatsize(struct pkg *pkg, int64_t size)
+pkg_set_newflatsize(struct pkg *pkg, int64_t size)
 {
 	assert(pkg != NULL);
 	assert(size >= 0);
@@ -286,7 +286,7 @@ pkg_setnewflatsize(struct pkg *pkg, int64_t size)
 }
 
 int
-pkg_setnewpkgsize(struct pkg *pkg, int64_t size)
+pkg_set_newpkgsize(struct pkg *pkg, int64_t size)
 {
 	assert(pkg != NULL);
 	assert(size >= 0);
@@ -313,7 +313,7 @@ pkg_licenselogic(struct pkg *pkg)
 }
 
 int
-pkg_setrowid(struct pkg *pkg, int64_t rowid) {
+pkg_set_rowid(struct pkg *pkg, int64_t rowid) {
 	assert(pkg != NULL);
 	pkg->rowid = rowid;
 	return (EPKG_OK);
@@ -796,7 +796,7 @@ pkg_addoption(struct pkg *pkg, const char *key, const char *value)
 }
 
 int
-pkg_list_isempty(struct pkg *pkg, pkg_list list) {
+pkg_list_is_empty(struct pkg *pkg, pkg_list list) {
 	switch (list) {
 		case PKG_DEPS:
 			return (STAILQ_EMPTY(&pkg->deps));

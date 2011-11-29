@@ -616,6 +616,9 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 				strcmp(ext, ".tar") != 0)
 			continue;
 
+		if (strcmp(ent->fts_name, "repo.txz") == 0)
+			continue;
+
 		pkg_path = ent->fts_path;
 		pkg_path += strlen(path);
 		while (pkg_path[0] == '/' )
@@ -625,6 +628,7 @@ pkg_create_repo(char *path, void (progress)(struct pkg *pkg, void *data), void *
 			retcode = EPKG_WARN;
 			continue;
 		}
+
 		if (progress != NULL)
 			progress(pkg, data);
 

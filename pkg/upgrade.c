@@ -78,7 +78,7 @@ exec_upgrade(int argc, char **argv)
 		pkg = NULL;
 	}
 
-	if (pkg_jobs_isempty(jobs)) {
+	if (pkg_jobs_is_empty(jobs)) {
 		printf("Nothing to do\n");
 		retcode = 0;
 		goto cleanup;

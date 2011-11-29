@@ -21,7 +21,7 @@
 #include "pkg_util.h"
 
 #include "db_upgrades.h"
-#define DBVERSION 6
+#define DBVERSION 7
 
 static struct pkgdb_it * pkgdb_it_new(struct pkgdb *, sqlite3_stmt *, int);
 static void pkgdb_regex(sqlite3_context *, int, sqlite3_value **, int);
@@ -63,16 +63,18 @@ static struct column_int_mapping {
 	const char * const name;
 	int (*set_int)(struct pkg *pkg, int64_t);
 } columns_int[] = {
-	{ "flatsize", pkg_setflatsize },
-	{ "newflatsize", pkg_setnewflatsize },
-	{ "pkgsize", pkg_setnewpkgsize },
+	{ "flatsize", pkg_set_flatsize },
+	{ "newflatsize", pkg_set_newflatsize },
+	{ "pkgsize", pkg_set_newpkgsize },
 	{ "licenselogic", pkg_set_licenselogic},
-	{ "rowid", pkg_setrowid},
+	{ "rowid", pkg_set_rowid},
+	{ "id", pkg_set_rowid },
+	{ "weight", NULL },
 	{ NULL, NULL}
 };
 
 static int
-loadval(sqlite3 *db, struct pkg *pkg, const char *sql, int flags, int (*pkg_adddata)(struct pkg *pkg, const char *data), int list)
+load_val(sqlite3 *db, struct pkg *pkg, const char *sql, int flags, int (*pkg_adddata)(struct pkg *pkg, const char *data), int list)
 {
 	sqlite3_stmt *stmt;
 	int ret;
@@ -129,13 +131,14 @@ populate_pkg(sqlite3_stmt *stmt, struct pkg *pkg) {
 			case SQLITE_INTEGER:
 				for (i = 0; columns_int[i].name != NULL; i++ ) {
 					if (!strcmp(columns_int[i].name, colname)) {
-						columns_int[i].set_int(pkg, sqlite3_column_int64(stmt, icol));
+						if (columns_int[i].set_int != NULL)
+							columns_int[i].set_int(pkg, sqlite3_column_int64(stmt, icol));
 						break;
 					}
 				}
 				if (strcmp(colname, "automatic") == 0) {
 					if (sqlite3_column_int64(stmt, icol) == 1)
-						pkg_setautomatic(pkg);
+						pkg_set_automatic(pkg);
 					break;
 				}
 				if (columns_int[i].name == NULL)
@@ -234,7 +237,6 @@ pkgdb_upgrade(struct pkgdb *db)
 {
 	int64_t db_version = -1;
 	const char *sql_upgrade;
-	char sql_version[30];
 	int i;
 
 	assert(db != NULL);
@@ -281,11 +283,9 @@ pkgdb_upgrade(struct pkgdb *db)
 			return (EPKG_FATAL);
 
 		if (sql_exec(db->sqlite, sql_upgrade) != EPKG_OK)
-					return (EPKG_FATAL);
+			return (EPKG_FATAL);
 
-		snprintf(sql_version, sizeof(sql_version),
-					"PRAGMA user_version = %" PRId64 ";", db_version);
-		if (sql_exec(db->sqlite, sql_version) != EPKG_OK)
+		if (sql_exec(db->sqlite, "PRAGMA user_version = %" PRId64 ";", db_version) != EPKG_OK)
 			return (EPKG_FATAL);
 
 		if (sql_exec(db->sqlite, "COMMIT;") != EPKG_OK)
@@ -428,7 +428,8 @@ pkgdb_init(sqlite3 *sdb)
 			" ON UPDATE RESTRICT,"
 		"UNIQUE(package_id, group_id)"
 	");"
-	"PRAGMA user_version = 6;"
+	"CREATE INDEX deporigini on deps(origin);"
+	"PRAGMA user_version = 7;"
 	"COMMIT;"
 	;
 
@@ -601,7 +602,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 					return (EPKG_FATAL);
 				}
 
-				sbuf_printf(sql, "ATTACH '%s' AS '%s';", remotepath, repo_name);
+				sbuf_printf(sql, "ATTACH '%q' AS '%s';", remotepath, repo_name);
 			}
 
 			sbuf_finish(sql);
@@ -639,7 +640,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 				return (EPKG_FATAL);
 			}
 
-			sbuf_printf(sql, "ATTACH '%s' AS 'remote';", remotepath);
+			sbuf_printf(sql, "ATTACH '%q' AS 'remote';", remotepath);
 			sbuf_finish(sql);
 
 			if (sql_exec(db->sqlite, sbuf_get(sql)) != EPKG_OK) {
@@ -742,51 +743,51 @@ pkgdb_it_next(struct pkgdb_it *it, struct pkg **pkg_p, int flags)
 		populate_pkg(it->stmt, pkg);
 
 		if (flags & PKG_LOAD_DEPS)
-			if ((ret = pkgdb_loaddeps(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_deps(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_RDEPS)
-			if ((ret = pkgdb_loadrdeps(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_rdeps(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_CONFLICTS)
-			if ((ret = pkgdb_loadconflicts(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_conflicts(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_FILES)
-			if ((ret = pkgdb_loadfiles(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_files(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_DIRS)
-			if ((ret = pkgdb_loaddirs(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_dirs(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_SCRIPTS)
-			if ((ret = pkgdb_loadscripts(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_scripts(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_OPTIONS)
-			if ((ret = pkgdb_loadoptions(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_options(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_MTREE)
-			if ((ret = pkgdb_loadmtree(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_mtree(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_CATEGORIES)
-			if ((ret = pkgdb_loadcategory(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_category(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_LICENSES)
-			if ((ret = pkgdb_loadlicense(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_license(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_USERS)
-			if ((ret = pkgdb_loaduser(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_user(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		if (flags & PKG_LOAD_GROUPS)
-			if ((ret = pkgdb_loadgroup(it->db, pkg)) != EPKG_OK)
+			if ((ret = pkgdb_load_group(it->db, pkg)) != EPKG_OK)
 				return (ret);
 
 		return (EPKG_OK);
@@ -806,6 +807,7 @@ pkgdb_it_free(struct pkgdb_it *it)
 
 	if (it->db->writable == 1) {
 		sql_exec(it->db->sqlite, "DROP TABLE IF EXISTS autoremove; "
+			"DROP TABLE IF EXISTS delete_job; "
 			"DROP TABLE IF EXISTS pkgjobs");
 	}
 
@@ -862,7 +864,7 @@ pkgdb_query(struct pkgdb *db, const char *pattern, match_t match)
 	}
 
 	snprintf(sql, sizeof(sql),
-			"SELECT id AS rowid, origin, name, version, comment, desc, "
+			"SELECT id, origin, name, version, comment, desc, "
 				"message, arch, osversion, maintainer, www, "
 				"prefix, flatsize, licenselogic "
 			"FROM packages AS p%s "
@@ -884,11 +886,11 @@ pkgdb_query_which(struct pkgdb *db, const char *path)
 {
 	sqlite3_stmt *stmt;
 	const char sql[] = ""
-		"SELECT p.id as rowid, p.origin, p.name, p.version, p.comment, p.desc, "
+		"SELECT p.id, p.origin, p.name, p.version, p.comment, p.desc, "
 			"p.message, p.arch, p.osversion, p.maintainer, p.www, "
 			"p.prefix, p.flatsize "
 			"FROM packages AS p, files AS f "
-			"WHERE p.rowid = f.package_id "
+			"WHERE p.id = f.package_id "
 				"AND f.path = ?1;";
 
 	assert(db != NULL);
@@ -940,7 +942,7 @@ pkgdb_is_dir_used(struct pkgdb *db, const char *dir, int64_t *res)
 }
 
 int
-pkgdb_loaddeps(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_deps(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt *stmt = NULL;
 	int ret = EPKG_OK;
@@ -984,14 +986,14 @@ pkgdb_loaddeps(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
-pkgdb_loadrdeps(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_rdeps(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt *stmt = NULL;
 	int ret;
 	const char sql[] = ""
 		"SELECT p.name, p.origin, p.version "
 		"FROM packages AS p, deps AS d "
-		"WHERE p.rowid = d.package_id "
+		"WHERE p.id = d.package_id "
 			"AND d.origin = ?1;";
 
 	assert(db != NULL && pkg != NULL);
@@ -1024,7 +1026,7 @@ pkgdb_loadrdeps(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
-pkgdb_loadfiles(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_files(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt *stmt = NULL;
 	int ret;
@@ -1063,7 +1065,7 @@ pkgdb_loadfiles(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
-pkgdb_loaddirs(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_dirs(struct pkgdb *db, struct pkg *pkg)
 {
 	const char sql[] = ""
 		"SELECT path, try "
@@ -1103,7 +1105,7 @@ pkgdb_loaddirs(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
-pkgdb_loadlicense(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_license(struct pkgdb *db, struct pkg *pkg)
 {
 	char sql[BUFSIZ];
 	const char *reponame = NULL;
@@ -1122,11 +1124,11 @@ pkgdb_loadlicense(struct pkgdb *db, struct pkg *pkg)
 	} else
 		snprintf(sql, sizeof(sql), basesql, "main", "main");
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_LICENSES, pkg_addlicense, PKG_LICENSES));
+	return (load_val(db->sqlite, pkg, sql, PKG_LOAD_LICENSES, pkg_addlicense, PKG_LICENSES));
 }
 
 int
-pkgdb_loadcategory(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_category(struct pkgdb *db, struct pkg *pkg)
 {
 	char sql[BUFSIZ];
 	const char *reponame = NULL;
@@ -1145,11 +1147,11 @@ pkgdb_loadcategory(struct pkgdb *db, struct pkg *pkg)
 	} else
 		snprintf(sql, sizeof(sql), basesql, "main", "main");
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_CATEGORIES, pkg_addcategory, PKG_CATEGORIES));
+	return (load_val(db->sqlite, pkg, sql, PKG_LOAD_CATEGORIES, pkg_addcategory, PKG_CATEGORIES));
 }
 
 int
-pkgdb_loaduser(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_user(struct pkgdb *db, struct pkg *pkg)
 {
 	const char sql[] = ""
 		"SELECT users.name "
@@ -1160,11 +1162,11 @@ pkgdb_loaduser(struct pkgdb *db, struct pkg *pkg)
 
 	assert(db != NULL && pkg != NULL);
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_USERS, pkg_adduser, PKG_USERS));
+	return (load_val(db->sqlite, pkg, sql, PKG_LOAD_USERS, pkg_adduser, PKG_USERS));
 }
 
 int
-pkgdb_loadgroup(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_group(struct pkgdb *db, struct pkg *pkg)
 {
 	const char sql[] = ""
 		"SELECT groups.name "
@@ -1175,11 +1177,11 @@ pkgdb_loadgroup(struct pkgdb *db, struct pkg *pkg)
 
 	assert(db != NULL && pkg != NULL);
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_GROUPS, pkg_addgroup, PKG_GROUPS));
+	return (load_val(db->sqlite, pkg, sql, PKG_LOAD_GROUPS, pkg_addgroup, PKG_GROUPS));
 }
 
 int
-pkgdb_loadconflicts(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_conflicts(struct pkgdb *db, struct pkg *pkg)
 {
 	const char sql[] = ""
 		"SELECT name "
@@ -1189,11 +1191,11 @@ pkgdb_loadconflicts(struct pkgdb *db, struct pkg *pkg)
 	assert(db != NULL && pkg != NULL);
 	assert(pkg->type == PKG_INSTALLED);
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_CONFLICTS, pkg_addconflict, PKG_CONFLICTS));
+	return (load_val(db->sqlite, pkg, sql, PKG_LOAD_CONFLICTS, pkg_addconflict, PKG_CONFLICTS));
 }
 
 int
-pkgdb_loadscripts(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_scripts(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt *stmt = NULL;
 	int ret;
@@ -1231,7 +1233,7 @@ pkgdb_loadscripts(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
-pkgdb_loadoptions(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_options(struct pkgdb *db, struct pkg *pkg)
 {
 	sqlite3_stmt *stmt = NULL;
 	int ret = EPKG_OK;
@@ -1275,7 +1277,7 @@ pkgdb_loadoptions(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
-pkgdb_loadmtree(struct pkgdb *db, struct pkg *pkg)
+pkgdb_load_mtree(struct pkgdb *db, struct pkg *pkg)
 {
 	const char sql[] = ""
 		"SELECT m.content "
@@ -1286,7 +1288,7 @@ pkgdb_loadmtree(struct pkgdb *db, struct pkg *pkg)
 	assert(db != NULL && pkg != NULL);
 	assert(pkg->type == PKG_INSTALLED);
 
-	return (loadval(db->sqlite, pkg, sql, PKG_LOAD_MTREE, pkg_setmtree, -1));
+	return (load_val(db->sqlite, pkg, sql, PKG_LOAD_MTREE, pkg_set_mtree, -1));
 }
 
 int
@@ -1303,7 +1305,7 @@ pkgdb_has_flag(struct pkgdb *db, int flag)
 	(db)->flags &= ~(flag)
 
 int
-pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg)
+pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete)
 {
 	struct pkg_dep *dep = NULL;
 	struct pkg_file *file = NULL;
@@ -1387,14 +1389,14 @@ pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg)
 
 	assert(db != NULL);
 
-	if (pkgdb_has_flag(db, PKGDB_FLAG_IN_FLIGHT)) {
+	if (!complete && pkgdb_has_flag(db, PKGDB_FLAG_IN_FLIGHT)) {
 		pkg_emit_error("%s", "tried to register a package with an in-flight SQL command");
 		return (EPKG_FATAL);
 	}
 
 	s = db->sqlite;
 
-	if (sql_exec(s, sql_begin) != EPKG_OK)
+	if (!complete && sql_exec(s, sql_begin) != EPKG_OK)
 		return (EPKG_FATAL);
 
 	PKGDB_SET_FLAG(db, PKGDB_FLAG_IN_FLIGHT);
@@ -1429,7 +1431,7 @@ pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg)
 	sqlite3_bind_text(stmt_pkg, 10, pkg_get(pkg, PKG_WWW), -1, SQLITE_STATIC);
 	sqlite3_bind_text(stmt_pkg, 11, pkg_get(pkg, PKG_PREFIX), -1, SQLITE_STATIC);
 	sqlite3_bind_int64(stmt_pkg, 12, pkg_flatsize(pkg));
-	sqlite3_bind_int(stmt_pkg, 13, pkg_isautomatic(pkg));
+	sqlite3_bind_int(stmt_pkg, 13, pkg_is_automatic(pkg));
 	sqlite3_bind_int64(stmt_pkg, 14, pkg_licenselogic(pkg));
 	sqlite3_bind_text(stmt_pkg, 15, pkg_get(pkg, PKG_MTREE), -1, SQLITE_STATIC);
 
@@ -1842,19 +1844,35 @@ pkgdb_unregister_pkg(struct pkgdb *db, const char *origin)
 }
 
 int
-sql_exec(sqlite3 *s, const char *sql)
+sql_exec(sqlite3 *s, const char *sql, ...)
 {
+	va_list ap;
+	const char *sql_to_exec;
+	char *sqlbuf = NULL;
 	char *errmsg;
+	int ret = EPKG_OK;
 
 	assert(s != NULL && sql != NULL);
+	if (strchr(sql, '%') != NULL) {
+		va_start(ap, sql);
+		sqlbuf = sqlite3_vmprintf(sql, ap);
+		va_end(ap);
+		sql_to_exec = sqlbuf;
+	} else {
+		sql_to_exec = sql;
+	}
 
-	if (sqlite3_exec(s, sql, NULL, NULL, &errmsg) != SQLITE_OK) {
+	if (sqlite3_exec(s, sql_to_exec, NULL, NULL, &errmsg) != SQLITE_OK) {
 		pkg_emit_error("sqlite: %s", errmsg);
 		sqlite3_free(errmsg);
+		ret = EPKG_FATAL;
 		return (EPKG_FATAL);
 	}
 
-	return (EPKG_OK);
+	if (sqlbuf != NULL)
+		free(sqlbuf);
+
+	return (ret);
 }
 
 static int
@@ -1941,10 +1959,11 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 	const char finalsql[] = "select pkgid AS rowid, origin, name, version, "
 		"comment, desc, message, arch, osversion, maintainer, "
 		"www, prefix, flatsize, newversion, newflatsize, pkgsize, "
-		"cksum, repopath, automatic, dbname FROM pkgjobs;";
-
+		"cksum, repopath, automatic, (select count(*) from '%s'.deps as d where d.origin = pkgjobs.origin) as weight, "
+		"dbname FROM pkgjobs order by weight DESC;";
+       
 	const char main_sql[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
-			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
+			"osversion, maintiner, www, prefix, flatsize, pkgsize, "
 			"cksum, repopath, automatic, dbname) "
 			"SELECT id, origin, name, version, comment, desc, "
 			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
@@ -2025,7 +2044,7 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 			ERROR_SQLITE(db->sqlite);
 			return (NULL);
 		}
-		sqlite3_bind_text(stmt, 1, pkgs[i], -1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(stmt, 1, pkgs[i], -1, SQLITE_STATIC);
 		while (sqlite3_step(stmt) != SQLITE_DONE);
 	}
 
@@ -2033,7 +2052,7 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 	sbuf_clear(sql);
 
 	/* Remove packages already installed and in the latest version */
-	sql_exec(db->sqlite, "delete from pkgjobs where (select origin from main.packages where origin=pkgjobs.origin and version=pkgjobs.version) IS NOT NULL;");
+	sql_exec(db->sqlite, "DELETE from pkgjobs where (select p.origin from main.packages as p where p.origin=pkgjobs.origin and version=pkgjobs.version) IS NOT NULL;");
 
 	/* Append dependencies */
 	sbuf_reset(sql);
@@ -2043,8 +2062,6 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 		sql_exec(db->sqlite, sbuf_get(sql));
 	} while (sqlite3_changes(db->sqlite) != 0);
 
-	sbuf_finish(sql);
-	sbuf_delete(sql);
 
 	/* Determine if there is an upgrade needed */
 	sql_exec(db->sqlite, "INSERT OR REPLACE INTO pkgjobs (pkgid, origin, name, version, comment, desc, message, arch, "
@@ -2056,10 +2073,16 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 			"FROM main.packages AS l, pkgjobs AS r WHERE l.origin = r.origin "
 			"AND (PKGLT(l.version, r.version) OR (l.name != r.name))");
 
-	if (sqlite3_prepare_v2(db->sqlite, finalsql, -1, &stmt, NULL) != SQLITE_OK) {
+	sbuf_reset(sql);
+	sbuf_printf(sql, finalsql, reponame);
+
+	if (sqlite3_prepare_v2(db->sqlite, sbuf_get(sql), -1, &stmt, NULL) != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
 		return (NULL);
 	}
+
+	sbuf_finish(sql);
+	sbuf_delete(sql);
 
 	return (pkgdb_it_new(db, stmt, PKG_REMOTE));
 }
@@ -2082,28 +2105,34 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 	const char finalsql[] = "select pkgid as rowid, origin, name, version, "
 		"comment, desc, message, arch, osversion, maintainer, "
 		"www, prefix, flatsize, newversion, newflatsize, pkgsize, "
-		"cksum, repopath, automatic, dbname FROM pkgjobs;";
-
-	const char pkgjobs_sql_1[] = "INSERT INTO pkgjobs (pkgid, origin, name, version, comment, desc, message, arch, "
-			"osversion, maintainer, www, prefix, flatsize, newversion, newflatsize, pkgsize, "
-			"cksum, repopath, automatic, dbname) "
-			"SELECT l.id, l.origin, l.name, l.version, l.comment, l.desc, "
-			"l.message, l.arch, l.osversion, l.maintainer, "
-			"l.www, l.prefix, l.flatsize, r.version AS newversion, r.flatsize AS newflatsize, "
-			"r.pkgsize, r.cksum, r.path AS repopath, l.automatic, '%s' AS dbname "
-			"FROM main.packages AS l, "
-			"'%s'.packages AS r "
-			"WHERE l.origin = r.origin "
-			"AND (PKGLT(l.version, r.version) OR (l.name != r.name))";
-
-	const char pkgjobs_sql_2[] = "INSERT INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
+		"cksum, repopath, automatic, (select count(*) from '%s'.deps as d where d.origin = pkgjobs.origin) as weight, "
+		"dbname FROM pkgjobs order by weight DESC;";
+		
+	const char pkgjobs_sql_1[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
 			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
-			"cksum, repopath, automatic, dbname)"
-			"SELECT DISTINCT id, origin, name, version, comment, desc, arch, osversion, maintainer, www, prefix, flatsize, "
-			"pkgsize, cksum, path as repopath, 1, '%s' AS dbname FROM '%s'.packages WHERE origin IN ("
-			"SELECT DISTINCT deps.origin FROM '%s'.deps as deps, pkgjobs WHERE deps.package_id = pkgjobs.pkgid and "
-			"deps.origin NOT IN (SELECT DISTINCT origin from pkgjobs) AND deps.origin NOT IN (SELECT DISTINCT origin from main.packages)"
-			");";
+			"cksum, repopath, automatic, dbname) "
+			"SELECT id, origin, name, version, comment, desc, "
+			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
+			"cksum, path, 0 FROM '%s'.packages WHERE origin IN (select origin from main.packages)";
+
+	const char pkgjobs_sql_2[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
+				"osversion, maintainer, www, prefix, flatsize, pkgsize, "
+				"cksum, repopath, automatic, dbname) "
+				"SELECT DISTINCT r.id, r.origin, r.name, r.version, r.comment, r.desc, "
+				"r.arch, r.osversion, r.maintainer, r.www, r.prefix, r.flatsize, r.pkgsize, "
+				"r.cksum, r.path, 1, '%s' AS dbname "
+				"FROM '%s'.packages AS r where r.origin IN "
+				"(SELECT d.origin from '%s'.deps AS d, pkgjobs as j WHERE d.package_id = j.pkgid) "
+				"AND (SELECT p.origin from main.packages as p WHERE p.origin=r.origin AND version=r.version) IS NULL;";
+
+	const char pkgjobs_sql_3[] = "INSERT OR REPLACE INTO pkgjobs (pkgid, origin, name, version, comment, desc, message, arch, "
+			"osversion, maintainer, www, prefix, flatsize, newversion, newflatsize, pkgsize, "
+			"cksum, repopath, automatic) "
+			"SELECT l.id, l.origin, l.name, l.version, l.comment, l.desc, l.message, l.arch, "
+			"l.osversion, l.maintainer, l.www, l.prefix, l.flatsize, r.version AS newversion, "
+			"r.flatsize AS newflatsize, r.pkgsize, r.cksum, r.repopath, r.automatic "
+			"FROM main.packages AS l, pkgjobs AS r WHERE l.origin = r.origin "
+			"AND (PKGLT(l.version, r.version) OR (l.name != r.name))";
 
 	/* Working on multiple repositories */
 	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
@@ -2134,14 +2163,21 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 
 	create_temporary_pkgjobs(db->sqlite);
 
-	sbuf_printf(sql, pkgjobs_sql_1, reponame, reponame);
+	sbuf_printf(sql, pkgjobs_sql_1, reponame);
 	sql_exec(db->sqlite, sbuf_get(sql));
+
+	/* Remove packages already installed and in the latest version */
+	sql_exec(db->sqlite, "DELETE from pkgjobs where (select p.origin from main.packages as p where p.origin=pkgjobs.origin and version=pkgjobs.version) IS NOT NULL;");
 
 	sbuf_reset(sql);
 	sbuf_printf(sql, pkgjobs_sql_2, reponame, reponame, reponame);
+
 	do {
 		sql_exec(db->sqlite, sbuf_get(sql));
 	} while (sqlite3_changes(db->sqlite) != 0);
+
+	/* Determine if there is an upgrade needed */
+	sql_exec(db->sqlite, pkgjobs_sql_3);
 
 	if (sqlite3_prepare_v2(db->sqlite, finalsql, -1, &stmt, NULL) != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
@@ -2170,7 +2206,7 @@ pkgdb_query_downgrades(struct pkgdb *db, const char *repo)
 	}
 
 	const char finalsql[] = ""
-		"SELECT l.id AS rowid, l.origin AS origin, l.name AS name, l.version AS version, l.comment AS comment, l.desc AS desc, "
+		"SELECT l.id, l.origin AS origin, l.name AS name, l.version AS version, l.comment AS comment, l.desc AS desc, "
 		"l.message AS message, l.arch AS arch, l.osversion AS osversion, l.maintainer AS maintainer, "
 		"l.www AS www, l.prefix AS prefix, l.flatsize AS flatsize, r.version AS version, r.flatsize AS newflatsize, "
 		"r.pkgsize AS pkgsize, r.path AS repopath, '%s' AS dbname "
@@ -2219,30 +2255,118 @@ struct pkgdb_it *
 pkgdb_query_autoremove(struct pkgdb *db)
 {
 	sqlite3_stmt *stmt = NULL;
+	int weight = 0;
 
 	assert(db != NULL);
 
 	const char sql[] = ""
-		"SELECT id AS rowid, origin, name, version, comment, desc, "
+		"SELECT id, p.origin, name, version, comment, desc, "
 		"message, arch, osversion, maintainer, www, prefix, "
-		"flatsize FROM packages WHERE id IN (SELECT pkgid FROM autoremove);";
+		"flatsize FROM packages as p, autoremove where id = pkgid ORDER BY weight ASC;";
 
 	sql_exec(db->sqlite, "DROP TABLE IF EXISTS autoremove; "
 			"CREATE TEMPORARY TABLE IF NOT EXISTS autoremove ("
-			"origin TEXT UNIQUE NOT NULL, pkgid INTEGER);");
+			"origin TEXT UNIQUE NOT NULL, pkgid INTEGER, weight INTEGER);");
 
 	do {
-		sql_exec(db->sqlite, "INSERT OR IGNORE into autoremove(origin, pkgid)"
-				"SELECT distinct origin, id FROM packages WHERE automatic=1 AND "
+		sql_exec(db->sqlite, "INSERT OR IGNORE into autoremove(origin, pkgid, weight) "
+				"SELECT distinct origin, id, %d FROM packages WHERE automatic=1 AND "
 				"origin NOT IN (SELECT DISTINCT deps.origin FROM deps WHERE "
-				"deps.package_id not in (select pkgid from  autoremove) and deps.origin = packages.origin);"
-			);
+				" deps.origin = packages.origin);"
+				, weight);
 	} while (sqlite3_changes(db->sqlite) != 0);
 
 	if (sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL) != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
 		return (NULL);
 	}
+
+	return (pkgdb_it_new(db, stmt, PKG_INSTALLED));
+}
+
+struct pkgdb_it *
+pkgdb_query_delete(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, int recursive)
+{
+	sqlite3_stmt *stmt;
+
+	struct sbuf *sql = sbuf_new_auto();
+	const char *how = NULL;
+	int i = 0;
+
+	assert(db != NULL);
+
+	const char sqlsel[] = ""
+		"SELECT id, p.origin, name, version, comment, desc, "
+		"message, arch, osversion, maintainer, www, prefix, "
+		"flatsize, (select count(*) from deps AS d where d.origin=del.origin) as weight FROM packages as p, delete_job as del where id = pkgid "
+		"ORDER BY weight ASC;";
+
+	sbuf_cat(sql, "INSERT OR IGNORE INTO delete_job (origin, pkgid) "
+			"SELECT p.origin, p.id FROM packages as p ");
+
+	switch (match) {
+		case MATCH_ALL:
+			how = NULL;
+			break;
+		case MATCH_EXACT:
+			how = "%s = ?1";
+			break;
+		case MATCH_GLOB:
+			how = "%s GLOB ?1";
+			break;
+		case MATCH_REGEX:
+			how = "%s REGEXP ?1";
+			break;
+		case MATCH_EREGEX:
+			how = "EREGEXP(?1, %s)";
+			break;
+	}
+
+	sql_exec(db->sqlite, "DROP TABLE IF EXISTS delete_job; "
+			"CREATE TEMPORARY TABLE IF NOT EXISTS delete_job ("
+			"origin TEXT UNIQUE NOT NULL, pkgid INTEGER);"
+			);
+
+	if (how != NULL) {
+		sbuf_cat(sql, " WHERE ");
+		sbuf_printf(sql, how, "p.name");
+		sbuf_cat(sql, " OR ");
+		sbuf_printf(sql, how, "p.origin");
+		sbuf_cat(sql, " OR ");
+		sbuf_printf(sql, how, "p.name || \"-\" || p.version");
+
+		for (i = 0; i < nbpkgs; i++) {
+			if (sqlite3_prepare_v2(db->sqlite, sbuf_data(sql), -1, &stmt, NULL) != SQLITE_OK) {
+				ERROR_SQLITE(db->sqlite);
+				return (NULL);
+			}
+			sqlite3_bind_text(stmt, 1, pkgs[i], -1, SQLITE_STATIC);
+			while (sqlite3_step(stmt) != SQLITE_DONE);
+		}
+	} else {
+		if (sqlite3_prepare_v2(db->sqlite, sbuf_data(sql), -1, &stmt, NULL) != SQLITE_OK) {
+			ERROR_SQLITE(db->sqlite);
+			return (NULL);
+		}
+		sqlite3_bind_text(stmt, 1, pkgs[i], -1, SQLITE_STATIC);
+		while (sqlite3_step(stmt) != SQLITE_DONE);
+	}
+
+	sqlite3_finalize(stmt);
+
+	if (recursive) {
+		do {
+			sql_exec(db->sqlite, "INSERT OR IGNORE INTO delete_job(origin, pkgid) "
+					"SELECT p.origin, p.id FROM deps AS d, packages AS p, delete_job AS del WHERE "
+					"d.origin=del.origin AND p.id = d.package_id");
+		} while (sqlite3_changes(db->sqlite) != 0);
+	}
+
+	if (sqlite3_prepare_v2(db->sqlite, sqlsel, -1, &stmt, NULL) != SQLITE_OK) {
+		ERROR_SQLITE(db->sqlite);
+		return (NULL);
+	}
+
 
 	return (pkgdb_it_new(db, stmt, PKG_INSTALLED));
 }
@@ -2307,7 +2431,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	struct pkg_repos *repos = NULL;
 	struct pkg_repos_entry *re = NULL;
 	const char *basesql = ""
-				"SELECT id AS rowid, origin, name, version, comment, "
+				"SELECT id, origin, name, version, comment, "
 					"prefix, desc, arch, osversion, maintainer, www, "
 					"licenselogic, flatsize AS newflatsize, pkgsize, "
 					"cksum, path AS repopath ";
@@ -2393,3 +2517,165 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 
 	return (pkgdb_it_new(db, stmt, PKG_REMOTE));
 }
+
+int
+pkgdb_integrity_append(struct pkgdb *db, struct pkg *p)
+{
+	int ret = EPKG_OK;
+
+	sqlite3_stmt *stmt = NULL;
+	sqlite3_stmt *stmt_conflicts = NULL;
+	struct pkg_file *file = NULL;
+	struct sbuf *conflictmsg = sbuf_new_auto();
+
+	const char sql[] = "INSERT INTO integritycheck (name, origin, version, path)"
+		"values (?1, ?2, ?3, ?4);";
+	const char sql_conflicts[] = "SELECT name, version from integritycheck where path=?1;";
+
+	assert( db != NULL && p != NULL);
+
+	sql_exec(db->sqlite, "CREATE TEMP TABLE IF NOT EXISTS integritycheck ( "
+			"name TEXT, "
+			"origin TEXT, "
+			"version TEXT, "
+			"path TEXT UNIQUE);"
+		);
+
+	if (sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL) != SQLITE_OK) {
+		ERROR_SQLITE(db->sqlite);
+		return (EPKG_FATAL);
+	}
+	while (pkg_files(p, &file) == EPKG_OK) {
+		sqlite3_bind_text(stmt, 1, pkg_get(p, PKG_NAME), -1, SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 2, pkg_get(p, PKG_ORIGIN), -1, SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 3, pkg_get(p, PKG_VERSION), -1, SQLITE_STATIC);
+		sqlite3_bind_text(stmt, 4, pkg_file_path(file), -1, SQLITE_STATIC);
+
+		if (sqlite3_step(stmt) != SQLITE_DONE) {
+			sbuf_clear(conflictmsg);
+			sbuf_printf(conflictmsg, "WARNING: %s-%s conflict on %s with: \n",
+					pkg_get(p, PKG_NAME), pkg_get(p, PKG_VERSION),
+					pkg_file_path(file));
+
+			if (sqlite3_prepare_v2(db->sqlite, sql_conflicts, -1, &stmt_conflicts, NULL) != SQLITE_OK) {
+				ERROR_SQLITE(db->sqlite);
+				sqlite3_finalize(stmt);
+				sbuf_delete(conflictmsg);
+				return (EPKG_FATAL);
+			}
+
+			sqlite3_bind_text(stmt_conflicts, 1, pkg_file_path(file), -1, SQLITE_STATIC);
+
+			while (sqlite3_step(stmt_conflicts) != SQLITE_DONE) {
+				sbuf_printf(conflictmsg, "\t- %s-%s\n",
+						sqlite3_column_text(stmt_conflicts, 0),
+						sqlite3_column_text(stmt_conflicts, 1));
+			}
+			sqlite3_finalize(stmt_conflicts);
+			sbuf_finish(conflictmsg);
+			pkg_emit_error(sbuf_data(conflictmsg));
+			ret = EPKG_FATAL;
+		}
+		sqlite3_reset(stmt);
+	}
+	sqlite3_finalize(stmt);
+	sbuf_delete(conflictmsg);
+
+	return (ret);
+}
+
+int
+pkgdb_integrity_check(struct pkgdb *db)
+{
+	int ret = EPKG_OK;
+	sqlite3_stmt *stmt;
+	sqlite3_stmt *stmt_conflicts;
+	struct sbuf *conflictmsg = sbuf_new_auto();
+	assert (db != NULL);
+
+	const char sql_local_conflict[] = "SELECT p.name, p.version FROM packages AS p, files AS f "
+		"WHERE p.id = f.package_id AND f.path = ?1;";
+
+	const char sql_conflicts[] = "SELECT name, version from integritycheck where path=?1;";
+
+	if (sqlite3_prepare_v2(db->sqlite,
+		"SELECT path, COUNT(path) from ("
+		"SELECT path from integritycheck UNION ALL "
+		"SELECT path from files, main.packages AS p where p.id=package_id and p.origin NOT IN (SELECT origin from integritycheck)"
+		") GROUP BY path HAVING (COUNT(path) > 1 );",
+		-1, &stmt, NULL) != SQLITE_OK) {
+		ERROR_SQLITE(db->sqlite);
+		return (EPKG_FATAL);
+	}
+
+	while (sqlite3_step(stmt) != SQLITE_DONE) {
+		sbuf_clear(conflictmsg);
+
+		if (sqlite3_prepare_v2(db->sqlite, sql_local_conflict, -1, &stmt_conflicts, NULL) != SQLITE_OK) {
+			ERROR_SQLITE(db->sqlite);
+			sqlite3_finalize(stmt);
+			sbuf_delete(conflictmsg);
+			return (EPKG_FATAL);
+		}
+
+		sqlite3_bind_text(stmt_conflicts, 1, sqlite3_column_text(stmt, 0), -1, SQLITE_STATIC);
+
+		sqlite3_step(stmt_conflicts);
+
+		sbuf_printf(conflictmsg, "WARNING: locally installed %s-%s conflicts on %s with:\n",
+				sqlite3_column_text(stmt_conflicts, 0),
+				sqlite3_column_text(stmt_conflicts, 1),
+				sqlite3_column_text(stmt, 0)
+				);
+		
+		sqlite3_finalize(stmt_conflicts);
+
+		if (sqlite3_prepare_v2(db->sqlite, sql_conflicts, -1, &stmt_conflicts, NULL) != SQLITE_OK) {
+			ERROR_SQLITE(db->sqlite);
+			sqlite3_finalize(stmt);
+			sbuf_delete(conflictmsg);
+			return (EPKG_FATAL);
+		}
+
+		sqlite3_bind_text(stmt_conflicts, 1, sqlite3_column_text(stmt, 0), -1, SQLITE_STATIC);
+
+		while (sqlite3_step(stmt_conflicts) != SQLITE_DONE) {
+			sbuf_printf(conflictmsg, "\t- %s-%s\n",
+					sqlite3_column_text(stmt_conflicts, 0),
+					sqlite3_column_text(stmt_conflicts, 1));
+		}
+		sqlite3_finalize(stmt_conflicts);
+		sbuf_finish(conflictmsg);
+		pkg_emit_error(sbuf_data(conflictmsg));
+		ret = EPKG_FATAL;
+	}
+
+	sqlite3_finalize(stmt);
+	sbuf_delete(conflictmsg);
+
+/*	sql_exec(db->sqlite, "DROP TABLE IF EXISTS integritycheck");*/
+
+	return (ret);
+}
+
+struct pkgdb_it *
+pkgdb_integrity_conflict_local(struct pkgdb *db, const char *origin)
+{
+       sqlite3_stmt *stmt;
+
+       assert(db != NULL && origin != NULL);
+
+       const char sql_conflicts [] = "SELECT DISTINCT p.id as rowid, p.origin, p.name, p.version, p.prefix "
+               "FROM packages AS p, files AS f, integritycheck AS i "
+               "WHERE p.id = f.package_id AND f.path = i.path AND i.origin = ?1";
+
+       if (sqlite3_prepare_v2(db->sqlite, sql_conflicts, -1, &stmt, NULL) != SQLITE_OK) {
+               ERROR_SQLITE(db->sqlite);
+               return (NULL);
+       }
+
+       sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_TRANSIENT);
+
+       return (pkgdb_it_new(db, stmt, PKG_INSTALLED));
+}
+
