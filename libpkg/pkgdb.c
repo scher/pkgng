@@ -602,7 +602,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 					return (EPKG_FATAL);
 				}
 
-				sbuf_printf(sql, "ATTACH '%q' AS '%s';", remotepath, repo_name);
+				sbuf_printf(sql, "ATTACH '%s' AS '%s';", remotepath, repo_name);
 			}
 
 			sbuf_finish(sql);
@@ -640,7 +640,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 				return (EPKG_FATAL);
 			}
 
-			sbuf_printf(sql, "ATTACH '%q' AS 'remote';", remotepath);
+			sbuf_printf(sql, "ATTACH '%s' AS 'remote';", remotepath);
 			sbuf_finish(sql);
 
 			if (sql_exec(db->sqlite, sbuf_get(sql)) != EPKG_OK) {
@@ -1956,14 +1956,14 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 	const char *how = NULL;
 	const char *reponame = NULL;
 
-	const char finalsql[] = "select pkgid AS rowid, origin, name, version, "
+	const char finalsql[] = "select pkgid AS id, origin, name, version, "
 		"comment, desc, message, arch, osversion, maintainer, "
 		"www, prefix, flatsize, newversion, newflatsize, pkgsize, "
 		"cksum, repopath, automatic, (select count(*) from '%s'.deps as d where d.origin = pkgjobs.origin) as weight, "
 		"dbname FROM pkgjobs order by weight DESC;";
        
 	const char main_sql[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
-			"osversion, maintiner, www, prefix, flatsize, pkgsize, "
+			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
 			"cksum, repopath, automatic, dbname) "
 			"SELECT id, origin, name, version, comment, desc, "
 			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
@@ -2102,11 +2102,11 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 		return (NULL);
 	}
 
-	const char finalsql[] = "select pkgid as rowid, origin, name, version, "
+	const char finalsql[] = "select pkgid as id, origin, name, version, "
 		"comment, desc, message, arch, osversion, maintainer, "
 		"www, prefix, flatsize, newversion, newflatsize, pkgsize, "
 		"cksum, repopath, automatic, (select count(*) from '%s'.deps as d where d.origin = pkgjobs.origin) as weight, "
-		"dbname FROM pkgjobs order by weight DESC;";
+		"dbname AS '%s' FROM pkgjobs order by weight DESC;";
 		
 	const char pkgjobs_sql_1[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
 			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
@@ -2179,7 +2179,10 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 	/* Determine if there is an upgrade needed */
 	sql_exec(db->sqlite, pkgjobs_sql_3);
 
-	if (sqlite3_prepare_v2(db->sqlite, finalsql, -1, &stmt, NULL) != SQLITE_OK) {
+	sbuf_reset(sql);
+	sbuf_printf(sql, finalsql, reponame, reponame);
+
+	if (sqlite3_prepare_v2(db->sqlite, sbuf_get(sql), -1, &stmt, NULL) != SQLITE_OK) {
 		ERROR_SQLITE(db->sqlite);
 		return (NULL);
 	}
