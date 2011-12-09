@@ -2091,7 +2091,7 @@ struct pkgdb_it *
 pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 {
 	struct pkg_repos *repos = NULL;
-	sqlite3_stmt *stmt;
+	sqlite3_stmt *stmt = NULL;
 	struct sbuf *sql = sbuf_new_auto();
 	const char *reponame = NULL;
 
@@ -2106,14 +2106,14 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 		"comment, desc, message, arch, osversion, maintainer, "
 		"www, prefix, flatsize, newversion, newflatsize, pkgsize, "
 		"cksum, repopath, automatic, (select count(*) from '%s'.deps as d where d.origin = pkgjobs.origin) as weight, "
-		"dbname AS '%s' FROM pkgjobs order by weight DESC;";
+		"'%s' AS dbname FROM pkgjobs order by weight DESC;";
 		
 	const char pkgjobs_sql_1[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
 			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
 			"cksum, repopath, automatic, dbname) "
 			"SELECT id, origin, name, version, comment, desc, "
 			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
-			"cksum, path, 0 FROM '%s'.packages WHERE origin IN (select origin from main.packages)";
+			"cksum, path, 0, '%s' FROM '%s'.packages WHERE origin IN (select origin from main.packages)";
 
 	const char pkgjobs_sql_2[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
 				"osversion, maintainer, www, prefix, flatsize, pkgsize, "
@@ -2163,7 +2163,7 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 
 	create_temporary_pkgjobs(db->sqlite);
 
-	sbuf_printf(sql, pkgjobs_sql_1, reponame);
+	sbuf_printf(sql, pkgjobs_sql_1, reponame, reponame);
 	sql_exec(db->sqlite, sbuf_get(sql));
 
 	/* Remove packages already installed and in the latest version */
