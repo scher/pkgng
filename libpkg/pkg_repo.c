@@ -34,8 +34,8 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
         /* 
          * Find if a repository name already exists.
 	 *
-         * NOTE1: The 'repo' names are always reserved, 
-         * as they are being used by default when 
+         * NOTE1: The 'repo' name is always reserved, 
+         * as it is being used by default when 
 	 * working on a single remote repository,
 	 * which means that PACKAGESITE is defined.
 	 *
@@ -44,14 +44,21 @@ pkg_repos_is_reserved_name(struct pkg_repos *repos, struct pkg_repos_entry *re)
 	 * main and temp databases, 
 	 * when working with ATTACH'ed databases in
 	 * multi-repos mode.
+	 *
+	 * NOTE3: The 'local' name is always reserved,
+	 * because this is the name of the local database.
          */
-
+	
 	repo_name = pkg_repos_get_name(re);
+
+	if ((strcmp(repo_name, "repo") == 0) ||
+	    (strcmp(repo_name, "main") == 0) ||
+	    (strcmp(repo_name, "temp") == 0) ||
+	    (strcmp(repo_name, "local") == 0))
+		return (EPKG_FATAL);
+
         while (pkg_repos_next(repos, &next) == EPKG_OK)
-                if ((strcmp(repo_name, pkg_repos_get_name(next)) == 0) ||
-                    (strcmp(repo_name, "repo") == 0) ||
-		    (strcmp(repo_name, "main") == 0) ||
-		    (strcmp(repo_name, "temp") == 0))
+                if ((strcmp(repo_name, pkg_repos_get_name(next)) == 0))
                         return (EPKG_FATAL);
 
         return (EPKG_OK);
@@ -321,7 +328,7 @@ pkg_repos_exists(struct pkg_repos *repos, const char *reponame)
 
 	return (exists == true ? EPKG_OK : EPKG_FATAL);
 }
-	
+
 void
 pkg_repos_free(struct pkg_repos *repos)
 {
