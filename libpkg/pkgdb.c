@@ -2370,6 +2370,8 @@ pkgdb_query_delete(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, int
 		return (NULL);
 	}
 
+	sbuf_finish(sql);
+	sbuf_delete(sql);
 
 	return (pkgdb_it_new(db, stmt, PKG_INSTALLED));
 }
