@@ -2008,14 +2008,14 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 			"cksum, repopath, automatic, dbname) "
 			"SELECT id, origin, name, version, comment, desc, "
 			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
-			"cksum, path, 0, '%s' AS dbname FROM '%s'.packages WHERE ";
+			"cksum, path, 0, '%s' FROM '%s'.packages WHERE ";
 
 	const char deps_sql[] = "INSERT INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
 				"osversion, maintainer, www, prefix, flatsize, pkgsize, "
-				"cksum, repopath, automatic) "
+				"cksum, repopath, automatic, dbname) "
 				"SELECT DISTINCT r.id, r.origin, r.name, r.version, r.comment, r.desc, "
 				"r.arch, r.osversion, r.maintainer, r.www, r.prefix, r.flatsize, r.pkgsize, "
-				"r.cksum, r.path, 1 "
+				"r.cksum, r.path, 1, '%s' "
 				"from '%s'.packages AS r where r.origin IN "
 				"(SELECT d.origin from '%s'.deps AS d, pkgjobs as j WHERE d.package_id = j.pkgid) "
 				"AND (SELECT origin from main.packages WHERE origin=r.origin AND version=r.version) IS NULL;";
@@ -2097,7 +2097,7 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 
 	/* Append dependencies */
 	sbuf_reset(sql);
-	sbuf_printf(sql, deps_sql, reponame, reponame);
+	sbuf_printf(sql, deps_sql, reponame, reponame, reponame);
 
 	do {
 		sql_exec(db->sqlite, sbuf_get(sql));
