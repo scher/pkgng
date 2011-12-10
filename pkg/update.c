@@ -114,7 +114,7 @@ exec_update(int argc, char **argv)
 	/* 
 	 * Fetch remote databases.
 	 */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") != 0) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") != 0) {
 		/*
 		 * Single remote database
 		 */

@@ -99,7 +99,7 @@ pkg_repo_fetch(struct pkg *pkg)
 	 * For a single attached database the repository URL should be
 	 * defined by PACKAGESITE.
 	 */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 		packagesite = pkg_get(pkg, PKG_REPOURL);
 	} else {
 		packagesite = pkg_config("PACKAGESITE");

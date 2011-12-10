@@ -570,7 +570,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	}
 
 	if (type == PKGDB_REMOTE) {
-		if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+		if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 			fprintf(stderr, "\t/!\\		   WARNING WARNING WARNING		/!\\\n");
 			fprintf(stderr, "\t/!\\	     WORKING ON MULTIPLE REPOSITORIES		/!\\\n");
 			fprintf(stderr, "\t/!\\  THIS FEATURE IS STILL CONSIDERED EXPERIMENTAL	/!\\\n");
@@ -669,7 +669,7 @@ pkgdb_close(struct pkgdb *db)
 
 	if (db->sqlite != NULL) {
 		if (db->type == PKGDB_REMOTE) {
-			if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+			if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 				/*
 				 * Working on multiple remote repositories.
 				 * Detach the remote repositories from the main database
@@ -2028,7 +2028,7 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 	}
 
 	/* Working on multiple repositories */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 		if (repo != NULL) {
 			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
 				pkg_emit_error("cannot get the attached databases");
@@ -2176,7 +2176,7 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 			"AND (PKGLT(l.version, r.version) OR (l.name != r.name))";
 
 	/* Working on multiple repositories */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 		if (repo != NULL) {
 			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
 				pkg_emit_error("cannot get the attached databases");
@@ -2260,7 +2260,7 @@ pkgdb_query_downgrades(struct pkgdb *db, const char *repo)
 		"AND PKGGT(l.version, r.version)";
 
 	/* Working on multiple repositories */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 		if (repo != NULL) {
 			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
 				pkg_emit_error("cannot get the attached databases");
@@ -2498,7 +2498,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	sql = sbuf_new_auto();
 	sbuf_cat(sql, basesql);
 
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 		/*
 		 * Working on multiple remote repositories
 		 */

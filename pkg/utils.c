@@ -45,7 +45,7 @@ print_info(struct pkg * const pkg, unsigned int opt)
                 printf("%-15s: %s\n", "Prefix", pkg_get(pkg, PKG_PREFIX));
 
 		if (pkg_type(pkg) == PKG_REMOTE) {
-			if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "true") == 0) {
+			if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
 				printf("%-15s: %s [%s]\n", "Repository",
 						pkg_get(pkg, PKG_REPONAME),
 						pkg_get(pkg, PKG_REPOURL));
