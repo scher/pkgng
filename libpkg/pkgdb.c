@@ -5,7 +5,6 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <libutil.h>
 #include <regex.h>
 #include <grp.h>
 #include <pwd.h>
