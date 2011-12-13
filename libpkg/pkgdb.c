@@ -494,7 +494,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	char remotepath[MAXPATHLEN + 1];
 	const char *dbdir = NULL;
 	const char *repo_name = NULL;
-	const char multirepos_enabled = NULL;
+	const char *multirepos_enabled = NULL;
 	struct sbuf *sql = sbuf_new_auto();
 	bool create = false;
 
@@ -666,7 +666,7 @@ pkgdb_close(struct pkgdb *db)
 	struct pkg_repos *repos = NULL;
 	struct pkg_repos_entry *re = NULL;
 	struct sbuf *sql = NULL;
-	const char multirepos_enabled = NULL;
+	const char *multirepos_enabled = NULL;
 
 	if (db == NULL)
 		return;
