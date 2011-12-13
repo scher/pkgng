@@ -35,6 +35,7 @@ exec_install(int argc, char **argv)
 	int64_t oldsize = 0, newsize = 0;
 	char size[7];
 	match_t match = MATCH_EXACT;
+	const char *assume_yes = NULL;
 
 	while ((ch = getopt(argc, argv, "ygxXr:")) != -1) {
 		switch (ch) {
@@ -120,6 +121,10 @@ exec_install(int argc, char **argv)
 	humanize_number(size, sizeof(size), dlsize, "B", HN_AUTOSCALE, 0);
 	printf("%s to be downloaded\n", size);
  
+	assume_yes = pkg_config("ASSUME_ALWAYS_YES");
+	if (assume_yes && (strcasecmp(assume_yes, "yes") == 0))
+		yes = 1;
+
 	if (yes == 0)
 		yes = query_yesno("\nProceed with installing packages [y/N]: ");
 
