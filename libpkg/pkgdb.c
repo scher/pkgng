@@ -2004,11 +2004,11 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 	const char *reponame = NULL;
 	const char *multirepos_enabled = NULL;
 
-	const char finalsql[] = "select pkgid AS id, origin, name, version, "
+	const char finalsql[] = "SELECT pkgid AS id, origin, name, version, "
 		"comment, desc, message, arch, osversion, maintainer, "
 		"www, prefix, flatsize, newversion, newflatsize, pkgsize, "
-		"cksum, repopath, automatic, (select count(*) from '%s'.deps as d where d.origin = pkgjobs.origin) as weight, "
-		"dbname FROM pkgjobs order by weight DESC;";
+		"cksum, repopath, automatic, (select count(*) FROM '%s'.deps as d WHERE d.origin = pkgjobs.origin) as weight, "
+		"dbname FROM pkgjobs ORDER BY weight DESC;";
        
 	const char main_sql[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
 			"osversion, maintainer, www, prefix, flatsize, pkgsize, "
@@ -2017,15 +2017,15 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 			"arch, osversion, maintainer, www, prefix, flatsize, pkgsize, "
 			"cksum, path, 0, '%s' FROM '%s'.packages WHERE ";
 
-	const char deps_sql[] = "INSERT INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
+	const char deps_sql[] = "INSERT OR IGNORE INTO pkgjobs (pkgid, origin, name, version, comment, desc, arch, "
 				"osversion, maintainer, www, prefix, flatsize, pkgsize, "
 				"cksum, repopath, automatic, dbname) "
 				"SELECT DISTINCT r.id, r.origin, r.name, r.version, r.comment, r.desc, "
 				"r.arch, r.osversion, r.maintainer, r.www, r.prefix, r.flatsize, r.pkgsize, "
 				"r.cksum, r.path, 1, '%s' "
-				"from '%s'.packages AS r where r.origin IN "
-				"(SELECT d.origin from '%s'.deps AS d, pkgjobs as j WHERE d.package_id = j.pkgid) "
-				"AND (SELECT origin from main.packages WHERE origin=r.origin AND version=r.version) IS NULL;";
+				"FROM '%s'.packages AS r where r.origin IN "
+				"(SELECT d.origin FROM '%s'.deps AS d, pkgjobs AS j WHERE d.package_id = j.pkgid) "
+				"AND (SELECT origin FROM main.packages WHERE origin=r.origin AND version=r.version) IS NULL;";
 
 	assert(db != NULL);
 
