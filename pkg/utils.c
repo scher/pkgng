@@ -36,6 +36,7 @@ print_info(struct pkg * const pkg, unsigned int opt)
         struct pkg_category *cat = NULL;
         struct pkg_license *lic = NULL;
         struct pkg_option *option = NULL;
+	const char *multirepos_enabled = NULL;
         char size[7];
 
         if (opt & INFO_FULL) {
@@ -45,7 +46,9 @@ print_info(struct pkg * const pkg, unsigned int opt)
                 printf("%-15s: %s\n", "Prefix", pkg_get(pkg, PKG_PREFIX));
 
 		if (pkg_type(pkg) == PKG_REMOTE) {
-			if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
+			multirepos_enabled = pkg_config("PKG_MULTIREPOS");
+
+			if (multirepos_enabled && (strcasecmp(multirepos_enabled, "yes") == 0)) {
 				printf("%-15s: %s [%s]\n", "Repository",
 						pkg_get(pkg, PKG_REPONAME),
 						pkg_get(pkg, PKG_REPOURL));

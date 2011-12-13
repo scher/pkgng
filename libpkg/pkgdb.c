@@ -494,6 +494,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	char remotepath[MAXPATHLEN + 1];
 	const char *dbdir = NULL;
 	const char *repo_name = NULL;
+	const char multirepos_enabled = NULL;
 	struct sbuf *sql = sbuf_new_auto();
 	bool create = false;
 
@@ -570,7 +571,9 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	}
 
 	if (type == PKGDB_REMOTE) {
-		if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
+		multirepos_enabled = pkg_config("PKG_MULTIREPOS");
+
+		if (multirepos_enabled && (strcasecmp(multirepos_enabled, "yes") == 0)) {
 			fprintf(stderr, "\t/!\\		   WARNING WARNING WARNING		/!\\\n");
 			fprintf(stderr, "\t/!\\	     WORKING ON MULTIPLE REPOSITORIES		/!\\\n");
 			fprintf(stderr, "\t/!\\  THIS FEATURE IS STILL CONSIDERED EXPERIMENTAL	/!\\\n");
@@ -663,13 +666,16 @@ pkgdb_close(struct pkgdb *db)
 	struct pkg_repos *repos = NULL;
 	struct pkg_repos_entry *re = NULL;
 	struct sbuf *sql = NULL;
+	const char multirepos_enabled = NULL;
 
 	if (db == NULL)
 		return;
 
 	if (db->sqlite != NULL) {
 		if (db->type == PKGDB_REMOTE) {
-			if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
+			multirepos_enabled = pkg_config("PKG_MULTIREPOS");
+
+			if (multirepos_enabled && (strcasecmp(multirepos_enabled, "yes") == 0)) {
 				/*
 				 * Working on multiple remote repositories.
 				 * Detach the remote repositories from the main database
@@ -1996,6 +2002,7 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 	struct sbuf *sql = sbuf_new_auto();
 	const char *how = NULL;
 	const char *reponame = NULL;
+	const char *multirepos_enabled = NULL;
 
 	const char finalsql[] = "select pkgid AS id, origin, name, version, "
 		"comment, desc, message, arch, osversion, maintainer, "
@@ -2028,7 +2035,9 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, c
 	}
 
 	/* Working on multiple repositories */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
+	multirepos_enabled = pkg_config("PKG_MULTIREPOS");
+
+	if (multirepos_enabled && (strcasecmp(multirepos_enabled, "yes") == 0)) {
 		if (repo != NULL) {
 			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
 				pkg_emit_error("cannot get the attached databases");
@@ -2135,6 +2144,7 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 	sqlite3_stmt *stmt = NULL;
 	struct sbuf *sql = sbuf_new_auto();
 	const char *reponame = NULL;
+	const char *multirepos_enabled = NULL;
 
 	assert(db != NULL);
 
@@ -2176,7 +2186,9 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo)
 			"AND (PKGLT(l.version, r.version) OR (l.name != r.name))";
 
 	/* Working on multiple repositories */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
+	multirepos_enabled = pkg_config("PKG_MULTIREPOS");
+
+	if (multirepos_enabled && (strcasecmp(multirepos_enabled, "yes") == 0)) {
 		if (repo != NULL) {
 			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
 				pkg_emit_error("cannot get the attached databases");
@@ -2241,6 +2253,7 @@ pkgdb_query_downgrades(struct pkgdb *db, const char *repo)
 	struct sbuf *sql = sbuf_new_auto();
 	const char *reponame = NULL;
 	sqlite3_stmt *stmt = NULL;
+	const char *multirepos_enabled = NULL;
 
 	assert(db != NULL);
 
@@ -2260,7 +2273,9 @@ pkgdb_query_downgrades(struct pkgdb *db, const char *repo)
 		"AND PKGGT(l.version, r.version)";
 
 	/* Working on multiple repositories */
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
+	multirepos_enabled = pkg_config("PKG_MULTIREPOS");
+
+	if (multirepos_enabled && (strcasecmp(multirepos_enabled, "yes") == 0)) {
 		if (repo != NULL) {
 			if (pkgdb_repos_new(db, &repos) != EPKG_OK) {
 				pkg_emit_error("cannot get the attached databases");
@@ -2476,6 +2491,7 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	struct sbuf *sql = NULL;
 	struct pkg_repos *repos = NULL;
 	struct pkg_repos_entry *re = NULL;
+	const char *multirepos_enabled = NULL;
 	const char *basesql = ""
 				"SELECT id, origin, name, version, comment, "
 					"prefix, desc, arch, osversion, maintainer, www, "
@@ -2498,7 +2514,9 @@ pkgdb_rquery(struct pkgdb *db, const char *pattern, match_t match, unsigned int 
 	sql = sbuf_new_auto();
 	sbuf_cat(sql, basesql);
 
-	if (strcasecmp(pkg_config("PKG_MULTIREPOS"), "yes") == 0) {
+	multirepos_enabled = pkg_config("PKG_MULTIREPOS");
+	    
+	if (multirepos_enabled && (strcasecmp(multirepos_enabled, "yes") == 0)) {
 		/*
 		 * Working on multiple remote repositories
 		 */
