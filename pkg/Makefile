@@ -1,5 +1,6 @@
 PROG=		pkg
 SRCS=		add.c \
+		audit.c \
 		autoremove.c \
 		backup.c \
 		clean.c \
@@ -21,6 +22,11 @@ SRCS=		add.c \
 		version.c \
 		which.c
 BINDIR=		/usr/sbin
+
+.if exists(../.git)
+GITHASH!=	git rev-parse HEAD
+CFLAGS+=	-DGITHASH=\"${GITHASH}\"
+.endif
 
 DEBUG_FLAGS+=	-g -O0
 .if defined(PROFILE_BUILD)

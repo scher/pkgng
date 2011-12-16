@@ -230,7 +230,7 @@ parse_sequence(struct pkg * pkg, yaml_node_t *node, yaml_document_t *doc, int at
 					pkg_addlicense(pkg, val->data.scalar.value);
 				break;
 			case PKG_USERS:
-				if (val->type == YAML_SCALAR_NODE || val->data.scalar.length <= 0)
+				if (val->type == YAML_SCALAR_NODE && val->data.scalar.length > 0)
 					pkg_adduser(pkg, val->data.scalar.value);
 				else if (val->type == YAML_MAPPING_NODE)
 					parse_mapping(pkg, val, doc, attr);
@@ -238,7 +238,7 @@ parse_sequence(struct pkg * pkg, yaml_node_t *node, yaml_document_t *doc, int at
 					pkg_emit_error("Skipping malformed license");
 				break;
 			case PKG_GROUPS:
-				if (val->type == YAML_SCALAR_NODE || val->data.scalar.length <= 0)
+				if (val->type == YAML_SCALAR_NODE && val->data.scalar.length > 0)
 					pkg_addgroup(pkg, val->data.scalar.value);
 				else if (val->type == YAML_MAPPING_NODE)
 					parse_mapping(pkg, val, doc, attr);
@@ -423,7 +423,9 @@ pkg_set_files_from_node(struct pkg *pkg, yaml_node_t *item, yaml_document_t *doc
 
 		++pair;
 	}
-	pkg_addfile_attr(pkg, key->data.scalar.value, sum, uname, gname, perm);
+
+	if (key != NULL)
+	    pkg_addfile_attr(pkg, key->data.scalar.value, sum, uname, gname, perm);
 
 	return (EPKG_OK);
 }
