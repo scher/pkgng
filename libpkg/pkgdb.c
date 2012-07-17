@@ -3644,25 +3644,27 @@ pkgshell_open(const char **reponame)
 int
 pkgdb_lock(struct pkgdb *db)
 {
-        assert(db != NULL);
-	assert(db->lock_count >= 0);
-	if (!(db->lock_count++))
-		return sql_exec(db->sqlite,
-		    "PRAGMA main.locking_mode=EXCLUSIVE;BEGIN IMMEDIATE;COMMIT;");
-	else
-		return (EPKG_OK);
+    assert(db != NULL);
+	assert(db->lock_count == 0);
+    while (true) {
+        if (sql_exec(db->sqlite, "PRAGMA main.locking_mode=EXCLUSIVE;BEGIN IMMEDIATE;COMMIT;")
+            == EPKG_OK) {
+            ++db->lock_count;
+            return EPKG_OK;
+        } else {
+            // wait a bit if the database is locked by other pkgng process
+            sleep(1);
+        }
+    }
 }
 
 int
 pkgdb_unlock(struct pkgdb *db)
 {
-        assert(db != NULL);
-	assert(db->lock_count >= 1);
-	if (!(--db->lock_count))
-		return sql_exec(db->sqlite,
-		    "PRAGMA main.locking_mode=NORMAL;BEGIN IMMEDIATE;COMMIT;");
-	else
-		return (EPKG_OK);
+    assert(db != NULL);
+	assert(db->lock_count == 1);
+    return sql_exec(db->sqlite,
+                    "PRAGMA main.locking_mode=NORMAL;BEGIN IMMEDIATE;COMMIT;");
 }
 
 int64_t
