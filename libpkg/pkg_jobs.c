@@ -49,9 +49,6 @@ pkg_jobs_new(struct pkg_jobs **j, pkg_jobs_t t, struct pkgdb *db)
 	assert(db != NULL);
 	assert(t != PKG_JOBS_INSTALL || db->type == PKGDB_REMOTE);
 
-	if (pkgdb_lock(db) != EPKG_OK)
-		return (EPKG_FATAL);
-
 	if ((*j = calloc(1, sizeof(struct pkg_jobs))) == NULL) {
 		pkg_emit_errno("calloc", "pkg_jobs");
 		return (EPKG_FATAL);
@@ -71,8 +68,6 @@ pkg_jobs_free(struct pkg_jobs *j)
 
 	if (j == NULL)
 		return;
-
-	pkgdb_unlock(j->db);
 
 	while (!STAILQ_EMPTY(&j->jobs)) {
 		p = STAILQ_FIRST(&j->jobs);
