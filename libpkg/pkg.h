@@ -53,6 +53,7 @@ struct pkg_user;
 struct pkg_group;
 struct pkg_shlib;
 
+extern const char * pkg_subcmd;
 struct pkgdb;
 struct pkgdb_it;
 

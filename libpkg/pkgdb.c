@@ -57,6 +57,8 @@
 #define PKGLT	1<<2
 #define PKGEQ	1<<3
 
+const char * pkg_subcmd = NULL;
+
 static struct pkgdb_it * pkgdb_it_new(struct pkgdb *, sqlite3_stmt *, int);
 static void pkgdb_regex(sqlite3_context *, int, sqlite3_value **, int);
 static void pkgdb_regex_basic(sqlite3_context *, int, sqlite3_value **);

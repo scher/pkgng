@@ -308,6 +308,8 @@ main(int argc, char **argv)
 		usage();
 		return (ret); /* Not reached but makes scanbuild happy */
 	}
+    
+    pkg_subcmd = command->name;
 
 	if (ambiguous <= 1) {
 		assert(command->exec != NULL);
