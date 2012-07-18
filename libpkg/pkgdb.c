@@ -58,6 +58,22 @@
 #define PKGEQ	1<<3
 
 const char * pkg_subcmd = NULL;
+const char * const subcmd_lockers[] = {
+    "add",
+    "audit",
+    "check",
+    "create",
+    "delete",
+    "fetch",
+    "install",
+    "register",
+    "remove",
+    "repo",
+    "set",
+    "update",
+    "upgrade"
+};
+const int subcmd_lockers_len = sizeof(subcmd_lockers)/sizeof(subcmd_lockers[0]);
 
 static struct pkgdb_it * pkgdb_it_new(struct pkgdb *, sqlite3_stmt *, int);
 static void pkgdb_regex(sqlite3_context *, int, sqlite3_value **, int);
@@ -722,7 +738,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 		reopen = true;
 		db = *db_p;
 		if (db->type == type)
-			return (EPKG_OK);
+			goto lock_test;
 	}
 
 	if (pkg_config_string(PKG_CONFIG_DBDIR, &dbdir) != EPKG_OK)
@@ -827,7 +843,20 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 		}
 	}
 
-	*db_p = db;
+    *db_p = db;
+
+lock_test:
+    /* check if it is necessary to lock the database
+       and possibly locks the database */
+    if (pkg_subcmd != NULL) {
+        if (req_lock(subcmd_lockers , subcmd_lockers_len, pkg_subcmd)) {
+//            printf("Sub command: %s requires a lock!\n", pkg_subcmd);
+            pkgdb_lock(db);
+//            printf("DB is locked\n");
+//            getchar();
+        }
+    }
+
 	return (EPKG_OK);
 }
 
@@ -839,6 +868,17 @@ pkgdb_close(struct pkgdb *db)
 
 	if (db->prstmt_initialized)
 		prstmt_finalize(db);
+    
+    /* check if it is necessary to UNlock the database
+     and possibly UNlocks the database */
+    if (pkg_subcmd != NULL) {
+        if (req_lock(subcmd_lockers , subcmd_lockers_len, pkg_subcmd)) {
+//            printf("Sub command: %s requires a UNlock!\n", pkg_subcmd);
+            assert(pkgdb_unlock(db) == EPKG_OK);
+//            printf("DB is UNlocked\n");
+//            getchar();
+        }
+    }
 
 	if (db->sqlite != NULL) {
 		assert(db->lock_count == 0);
@@ -3665,8 +3705,13 @@ pkgdb_unlock(struct pkgdb *db)
 {
     assert(db != NULL);
 	assert(db->lock_count == 1);
-    return sql_exec(db->sqlite,
-                    "PRAGMA main.locking_mode=NORMAL;BEGIN IMMEDIATE;COMMIT;");
+    if (sql_exec(db->sqlite, "PRAGMA main.locking_mode=NORMAL;BEGIN IMMEDIATE;COMMIT;")
+        == EPKG_OK) {
+        --db->lock_count;
+        return EPKG_OK;
+    } else {
+        return EPKG_FATAL;
+    }
 }
 
 int64_t
