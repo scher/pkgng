@@ -57,9 +57,6 @@ struct dns_srvinfo {
 	struct dns_srvinfo *next;
 };
 
-bool req_lock(const char * const commands[], const int commands_len,
-              const char * const cmd);
-
 void sbuf_init(struct sbuf **);
 int sbuf_set(struct sbuf **, const char *);
 char * sbuf_get(struct sbuf *);

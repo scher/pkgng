@@ -225,4 +225,7 @@ int analyse_query_string(char *qstr, struct query_flags *q_flags,
 			 const unsigned int q_flags_len, int *flags,
 			 char *multiline);
 
+bool req_lock(const char * const commands[], const int commands_len,
+              const char * const cmd);
+
 #endif

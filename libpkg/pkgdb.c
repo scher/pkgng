@@ -57,23 +57,7 @@
 #define PKGLT	1<<2
 #define PKGEQ	1<<3
 
-const char * pkg_subcmd = NULL;
-const char * const subcmd_lockers[] = {
-    "add",
-    "audit",
-    "check",
-    "create",
-    "delete",
-    "fetch",
-    "install",
-    "register",
-    "remove",
-    "repo",
-    "set",
-    "update",
-    "upgrade"
-};
-const int subcmd_lockers_len = sizeof(subcmd_lockers)/sizeof(subcmd_lockers[0]);
+bool require_lock = false;
 
 static struct pkgdb_it * pkgdb_it_new(struct pkgdb *, sqlite3_stmt *, int);
 static void pkgdb_regex(sqlite3_context *, int, sqlite3_value **, int);
@@ -737,8 +721,8 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 		assert(!(*db_p)->locked);
 		reopen = true;
 		db = *db_p;
-		if (db->type == type)
-			goto lock_test;
+		if ( (db->type == type) && (require_lock) )
+			pkgdb_lock(db);
 	}
 
 	if (pkg_config_string(PKG_CONFIG_DBDIR, &dbdir) != EPKG_OK)
@@ -780,6 +764,15 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 			pkgdb_close(db);
 			return (EPKG_FATAL);
 		}
+
+        /* check if it is necessary to lock the database
+         and possibly locks the database */
+        if (require_lock) {
+            printf("Current command requires a lock!\nLocking database...\n");
+            pkgdb_lock(db);
+            printf("DB is locked\n");
+            getchar();
+        }
 
 		/* Wait up to 5 seconds if database is busy */
 		sqlite3_busy_timeout(db->sqlite, 5000);
@@ -845,18 +838,6 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 
     *db_p = db;
 
-lock_test:
-    /* check if it is necessary to lock the database
-       and possibly locks the database */
-    if (pkg_subcmd != NULL) {
-        if (req_lock(subcmd_lockers , subcmd_lockers_len, pkg_subcmd)) {
-//            printf("Sub command: %s requires a lock!\n", pkg_subcmd);
-            pkgdb_lock(db);
-//            printf("DB is locked\n");
-//            getchar();
-        }
-    }
-
 	return (EPKG_OK);
 }
 
@@ -871,13 +852,11 @@ pkgdb_close(struct pkgdb *db)
     
     /* check if it is necessary to UNlock the database
      and possibly UNlocks the database */
-    if (pkg_subcmd != NULL) {
-        if (req_lock(subcmd_lockers , subcmd_lockers_len, pkg_subcmd)) {
-//            printf("Sub command: %s requires a UNlock!\n", pkg_subcmd);
-            assert(pkgdb_unlock(db) == EPKG_OK);
-//            printf("DB is UNlocked\n");
-//            getchar();
-        }
+    if (require_lock) {
+        printf("Current command requires an UNlock!\nUnLocking database...\n");
+        assert(pkgdb_unlock(db) == EPKG_OK);
+        printf("DB is UNlocked\n");
+        getchar();
     }
 
 	if (db->sqlite != NULL) {

@@ -38,6 +38,16 @@
 
 #include "pkgcli.h"
 
+bool req_lock(const char * const commands[],const int commands_len ,
+              const char * const cmd)
+{
+    for (int i = 0; i < commands_len; i++) {
+        if (strcmp(commands[i], cmd) == 0)
+            return true;
+    }
+    return false;
+}
+
 bool
 query_yesno(const char *msg, ...)
 {
