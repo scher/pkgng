@@ -35,7 +35,7 @@
 struct pkgdb {
 	sqlite3 *sqlite;
 	pkgdb_t type;
-	int lock_count;
+	bool locked;
 	bool prstmt_initialized;
 };
 

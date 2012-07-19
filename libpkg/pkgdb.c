@@ -734,7 +734,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	int ret;
 
 	if (*db_p != NULL) {
-		assert((*db_p)->lock_count == 0);
+		assert(!(*db_p)->locked);
 		reopen = true;
 		db = *db_p;
 		if (db->type == type)
@@ -750,7 +750,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	}
 
 	db->type = type;
-	db->lock_count = 0;
+	db->locked = false;
 	db->prstmt_initialized = false;
 
 	if (!reopen) {
@@ -881,7 +881,7 @@ pkgdb_close(struct pkgdb *db)
     }
 
 	if (db->sqlite != NULL) {
-		assert(db->lock_count == 0);
+		assert(!db->locked);
 		if (db->type == PKGDB_REMOTE) {
 			pkgdb_detach_remotes(db->sqlite);
 		}
@@ -3687,11 +3687,11 @@ int
 pkgdb_lock(struct pkgdb *db)
 {
     assert(db != NULL);
-	assert(db->lock_count == 0);
+	assert(!db->locked);
     while (true) {
         if (sql_exec(db->sqlite, "PRAGMA main.locking_mode=EXCLUSIVE;BEGIN IMMEDIATE;COMMIT;")
             == EPKG_OK) {
-            ++db->lock_count;
+            db->locked = true;
             return EPKG_OK;
         } else {
             // wait a bit if the database is locked by other pkgng process
@@ -3704,10 +3704,10 @@ int
 pkgdb_unlock(struct pkgdb *db)
 {
     assert(db != NULL);
-	assert(db->lock_count == 1);
+	assert(db->locked);
     if (sql_exec(db->sqlite, "PRAGMA main.locking_mode=NORMAL;BEGIN IMMEDIATE;COMMIT;")
         == EPKG_OK) {
-        --db->lock_count;
+        db->locked = false;
         return EPKG_OK;
     } else {
         return EPKG_FATAL;
