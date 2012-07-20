@@ -259,6 +259,8 @@ typedef enum _pkg_config_key {
 	PKG_CONFIG_PORTAUDIT_SITE = 15,
 	PKG_CONFIG_SRV_MIRROR = 16,
 	PKG_CONFIG_FETCH_RETRY = 17,
+    PKG_CONFIG_DB_LOCK_T = 18,
+    PKG_CONFIG_DB_LOCK_ATTEMPTS = 19
 } pkg_config_key;
 
 typedef enum {

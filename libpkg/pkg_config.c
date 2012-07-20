@@ -171,6 +171,22 @@ static struct config_entry c[] = {
 		"3",
 		{ NULL }
 	},
+    [PKG_CONFIG_DB_LOCK_T] = {
+        INTEGER,
+        "PKG_DB_LOCK_ATTEMT_TIMEOUT",
+        "1",
+        { NULL }
+    },
+    /* 
+        0 - default value - number of attempts to lock a DB
+        it means infinity number of attempts
+    */
+    [PKG_CONFIG_DB_LOCK_ATTEMPTS] = {
+        INTEGER,
+        "PKG_DB_LOCK_ATTEMTS_NUMBER",
+        "0",
+        { NULL }
+    }
 };
 
 static bool parsed = false;

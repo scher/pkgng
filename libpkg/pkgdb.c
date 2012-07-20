@@ -3667,16 +3667,31 @@ pkgdb_lock(struct pkgdb *db)
 {
     assert(db != NULL);
 	assert(!db->locked);
+
+    int64_t lock_t, lock_attempts_n;
+    if ( (pkg_config_int64(PKG_CONFIG_DB_LOCK_T, &lock_t) != EPKG_OK) ||
+        (pkg_config_int64(PKG_CONFIG_DB_LOCK_ATTEMPTS, &lock_attempts_n) !=
+            EPKG_OK) ) {
+            return EPKG_FATAL;
+        }
+
+    assert(lock_t > 0);
+
     while (true) {
         if (sql_exec(db->sqlite, "PRAGMA main.locking_mode=EXCLUSIVE;BEGIN IMMEDIATE;COMMIT;")
             == EPKG_OK) {
             db->locked = true;
             return EPKG_OK;
         } else {
+            if (--lock_attempts_n ==0)
+                break; 
             // wait a bit if the database is locked by other pkgng process
-            sleep(1);
+            sleep(lock_t);
         }
     }
+    // TODO: if unable to lock a db after lock_attempts_n
+    // hangle it here
+    return EPKG_FATAL;
 }
 
 int
