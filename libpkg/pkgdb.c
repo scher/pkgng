@@ -3668,6 +3668,9 @@ pkgdb_lock(struct pkgdb *db)
     assert(db != NULL);
 	assert(!db->locked);
 
+    int sql_ret = SQLITE_OK;
+    int ret = EPKG_OK;
+    char * errmsg = NULL;
     int64_t lock_t, lock_attempts_n;
     if ( (pkg_config_int64(PKG_CONFIG_DB_LOCK_T, &lock_t) != EPKG_OK) ||
         (pkg_config_int64(PKG_CONFIG_DB_LOCK_ATTEMPTS, &lock_attempts_n) !=
@@ -3678,20 +3681,35 @@ pkgdb_lock(struct pkgdb *db)
     assert(lock_t > 0);
 
     while (true) {
-        if (sql_exec(db->sqlite, "PRAGMA main.locking_mode=EXCLUSIVE;BEGIN IMMEDIATE;COMMIT;")
-            == EPKG_OK) {
-            db->locked = true;
-            return EPKG_OK;
-        } else {
-            if (--lock_attempts_n ==0)
-                break; 
-            // wait a bit if the database is locked by other pkgng process
-            sleep(lock_t);
+        sql_ret = sqlite3_exec(db->sqlite,
+                               "PRAGMA main.locking_mode=EXCLUSIVE;BEGIN IMMEDIATE;COMMIT;",
+                               NULL, NULL, &errmsg);
+        switch (sql_ret) {
+            case SQLITE_OK:
+                db->locked = true;
+                return EPKG_OK;
+                break;
+            case SQLITE_BUSY:
+                if (--lock_attempts_n ==0) {
+                    // if unable to lock a db after lock_attempts_n
+                    // handle it here
+                    ret = EPKG_FATAL;
+                    goto cleanup;
+                }
+                // wait a bit if the database is locked by other pkgng process
+                sleep(lock_t);
+                break;
+            default:
+                // unhandled error code of sqlite transaction
+                ret = EPKG_FATAL;
+                goto cleanup;
+                break;
         }
     }
-    // TODO: if unable to lock a db after lock_attempts_n
-    // hangle it here
-    return EPKG_FATAL;
+cleanup:
+    pkg_emit_error("sqlite: %s", errmsg);
+    sqlite3_free(errmsg);
+    return ret;
 }
 
 int
