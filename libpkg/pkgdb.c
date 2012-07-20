@@ -721,8 +721,18 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 		assert(!(*db_p)->locked);
 		reopen = true;
 		db = *db_p;
-		if ( (db->type == type) && (require_lock) )
-			pkgdb_lock(db);
+		if (db->type == type) {
+            if (require_lock) {
+                printf("Current command requires a lock!\nLocking database...\n");
+                if ( pkgdb_lock(db) != EPKG_OK ) {
+                    pkgdb_close(db);
+                    return EPKG_FATAL;
+                };
+                printf("DB is locked\n");
+                getchar();
+            }
+            return (EPKG_OK);
+        }
 	}
 
 	if (pkg_config_string(PKG_CONFIG_DBDIR, &dbdir) != EPKG_OK)
@@ -769,7 +779,10 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
          and possibly locks the database */
         if (require_lock) {
             printf("Current command requires a lock!\nLocking database...\n");
-            pkgdb_lock(db);
+            if ( pkgdb_lock(db) != EPKG_OK ) {
+                pkgdb_close(db);
+                return EPKG_FATAL;
+            };
             printf("DB is locked\n");
             getchar();
         }
