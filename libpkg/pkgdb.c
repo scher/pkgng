@@ -862,15 +862,6 @@ pkgdb_close(struct pkgdb *db)
 
 	if (db->prstmt_initialized)
 		prstmt_finalize(db);
-    
-    /* check if it is necessary to UNlock the database
-     and possibly UNlocks the database */
-    if (require_lock) {
-        printf("Current command requires an UNlock!\nUnLocking database...\n");
-        assert(pkgdb_unlock(db) == EPKG_OK);
-        printf("DB is UNlocked\n");
-        getchar();
-    }
 
 	if (db->sqlite != NULL) {
 		assert(!db->locked);
