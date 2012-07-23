@@ -174,7 +174,7 @@ static struct config_entry c[] = {
     [PKG_CONFIG_DB_LOCK_TIMEOUT] = {
         INTEGER,
         "PKG_DB_LOCK_TIMEOUT",
-        "1",
+        "5",
         { NULL }
     },
     /* 
