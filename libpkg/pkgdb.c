@@ -3676,7 +3676,7 @@ pkgdb_lock(struct pkgdb *db)
     int ret = EPKG_OK;
     char * errmsg = NULL;
     int64_t lock_t, lock_attempts_n;
-    if ( (pkg_config_int64(PKG_CONFIG_DB_LOCK_T, &lock_t) != EPKG_OK) ||
+    if ( (pkg_config_int64(PKG_CONFIG_DB_LOCK_TIMEOUT, &lock_t) != EPKG_OK) ||
         (pkg_config_int64(PKG_CONFIG_DB_LOCK_ATTEMPTS, &lock_attempts_n) !=
             EPKG_OK) ) {
             return EPKG_FATAL;

@@ -171,9 +171,9 @@ static struct config_entry c[] = {
 		"3",
 		{ NULL }
 	},
-    [PKG_CONFIG_DB_LOCK_T] = {
+    [PKG_CONFIG_DB_LOCK_TIMEOUT] = {
         INTEGER,
-        "PKG_DB_LOCK_ATTEMT_TIMEOUT",
+        "PKG_DB_LOCK_TIMEOUT",
         "1",
         { NULL }
     },
@@ -183,7 +183,7 @@ static struct config_entry c[] = {
     */
     [PKG_CONFIG_DB_LOCK_ATTEMPTS] = {
         INTEGER,
-        "PKG_DB_LOCK_ATTEMTS_NUMBER",
+        "PKG_DB_LOCK_ATTEMPTS",
         "0",
         { NULL }
     }
