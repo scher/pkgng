@@ -716,6 +716,7 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 	bool multirepos_enabled = false;
 	bool create = false;
 	int ret;
+    int64_t lock_t;
 
 	if (*db_p != NULL) {
 		assert(!(*db_p)->locked);
@@ -775,6 +776,13 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 			return (EPKG_FATAL);
 		}
 
+        /* Wait up to lock_t milliseconds if database is busy */
+        if (pkg_config_int64(PKG_CONFIG_DB_LOCK_TIMEOUT, &lock_t) != EPKG_OK) {
+            return EPKG_FATAL;
+        }
+        /* It is conveniet for user to set time out in seconds */
+		sqlite3_busy_timeout(db->sqlite, lock_t*1000);
+
         /* check if it is necessary to lock the database
          and possibly locks the database */
         if (require_lock) {
@@ -786,9 +794,6 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
             printf("DB is locked\n");
             getchar();
         }
-
-		/* Wait up to 5 seconds if database is busy */
-		sqlite3_busy_timeout(db->sqlite, 5000);
 
 		/* If the database is missing we have to initialize it */
 		if (create == true)
@@ -3675,14 +3680,12 @@ pkgdb_lock(struct pkgdb *db)
     int sql_ret = SQLITE_OK;
     int ret = EPKG_OK;
     char * errmsg = NULL;
-    int64_t lock_t, lock_attempts_n;
-    if ( (pkg_config_int64(PKG_CONFIG_DB_LOCK_TIMEOUT, &lock_t) != EPKG_OK) ||
-        (pkg_config_int64(PKG_CONFIG_DB_LOCK_ATTEMPTS, &lock_attempts_n) !=
-            EPKG_OK) ) {
-            return EPKG_FATAL;
-        }
+    int64_t lock_attempts_n;
 
-    assert(lock_t > 0);
+    if (pkg_config_int64(PKG_CONFIG_DB_LOCK_ATTEMPTS, &lock_attempts_n) !=
+        EPKG_OK) {
+        return EPKG_FATAL;
+    }
 
     while (true) {
         sql_ret = sqlite3_exec(db->sqlite,
@@ -3700,8 +3703,6 @@ pkgdb_lock(struct pkgdb *db)
                     ret = EPKG_FATAL;
                     goto cleanup;
                 }
-                // wait a bit if the database is locked by other pkgng process
-                sleep(lock_t);
                 break;
             default:
                 // unhandled error code of sqlite transaction
