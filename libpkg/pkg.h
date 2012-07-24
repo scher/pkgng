@@ -774,7 +774,7 @@ int pkgdb_it_next(struct pkgdb_it *, struct pkg **pkg, int flags);
 /**
  * Free a struct pkgdb_it.
  */
-void pkgdb_it_free(struct pkgdb_it *);
+int pkgdb_it_free(struct pkgdb_it *);
 
 /**
  * Compact the database to save space.

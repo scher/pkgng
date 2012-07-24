@@ -580,7 +580,15 @@ pkgdb_init(sqlite3 *sdb)
 			" ON UPDATE RESTRICT,"
 		"PRIMARY KEY (package_id, shlib_id)"
 	");"
-
+    "CREATE TABLE active_installations ("
+        "pkgid INTEGER,"
+        "origin TEXT UNIQUE NOT NULL,"
+        "name TEXT NOT NULL,"
+        "version TEXT NOT NULL,"
+        "www TEXT,"
+        "start_time TEXT NOT NULL,"
+        "pid INT"
+    ");"
 	/* Mark the end of the array */
 
 	"CREATE INDEX deporigini on deps(origin);"
@@ -723,15 +731,6 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
 		reopen = true;
 		db = *db_p;
 		if (db->type == type) {
-            if (require_lock) {
-                printf("Current command requires a lock!\nLocking database...\n");
-                if ( pkgdb_lock(db) != EPKG_OK ) {
-                    pkgdb_close(db);
-                    return EPKG_FATAL;
-                };
-                printf("DB is locked\n");
-                getchar();
-            }
             return (EPKG_OK);
         }
 	}
@@ -782,18 +781,6 @@ pkgdb_open(struct pkgdb **db_p, pkgdb_t type)
         }
         /* It is conveniet for user to set time out in seconds */
 		sqlite3_busy_timeout(db->sqlite, lock_t*1000);
-
-        /* check if it is necessary to lock the database
-         and possibly locks the database */
-        if (require_lock) {
-            printf("Current command requires a lock!\nLocking database...\n");
-            if ( pkgdb_lock(db) != EPKG_OK ) {
-                pkgdb_close(db);
-                return EPKG_FATAL;
-            };
-            printf("DB is locked\n");
-            getchar();
-        }
 
 		/* If the database is missing we have to initialize it */
 		if (create == true)
@@ -955,20 +942,27 @@ pkgdb_it_next(struct pkgdb_it *it, struct pkg **pkg_p, int flags)
 	}
 }
 
-void
+int
 pkgdb_it_free(struct pkgdb_it *it)
 {
+    int ret = EPKG_OK;
+    
 	if (it == NULL)
-		return;
+		return ret;
 
 	if (!sqlite3_db_readonly(it->db->sqlite, "main")) {
 		sql_exec(it->db->sqlite, "DROP TABLE IF EXISTS autoremove; "
 			"DROP TABLE IF EXISTS delete_job; "
 			"DROP TABLE IF EXISTS pkgjobs");
 	}
+    
+    if (it->db->locked)
+        if (pkgdb_unlock(it->db) != EPKG_OK)
+            ret = EPKG_FATAL;
 
 	sqlite3_finalize(it->stmt);
 	free(it);
+    return ret;
 }
 
 static const char *
@@ -2479,6 +2473,9 @@ pkgdb_query_newpkgversion(struct pkgdb *db, const char *repo)
 	assert(db != NULL);
 	assert(db->type == PKGDB_REMOTE);
 
+    if (pkgdb_lock(db) != EPKG_OK)
+        return NULL;
+
 	if ((reponame = pkgdb_get_reponame(db, repo)) == NULL)
 		return (NULL);
 
@@ -2592,6 +2589,9 @@ pkgdb_query_installs(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs,
 
 	assert(db != NULL);
 	assert(db->type == PKGDB_REMOTE);
+
+    if (pkgdb_lock(db) != EPKG_OK)
+        return NULL;
 
 	if ((reponame = pkgdb_get_reponame(db, repo)) == NULL)
 		return (NULL);
@@ -2774,6 +2774,9 @@ pkgdb_query_upgrades(struct pkgdb *db, const char *repo, bool all)
 				"AND p.origin = j.origin"
 		");";
 
+    if (pkgdb_lock(db) != EPKG_OK)
+        return NULL;
+
 	if ((reponame = pkgdb_get_reponame(db, repo)) == NULL)
 		return (NULL);
 
@@ -2862,6 +2865,9 @@ pkgdb_query_downgrades(struct pkgdb *db, const char *repo)
 		"WHERE l.origin = r.origin "
 		"AND PKGGT(l.version, r.version)";
 
+    if (pkgdb_lock(db) != EPKG_OK)
+        return NULL;
+    
 	if ((reponame = pkgdb_get_reponame(db, repo)) == NULL)
 		return (NULL);
 
@@ -2892,6 +2898,9 @@ pkgdb_query_autoremove(struct pkgdb *db)
 		"SELECT id, p.origin, name, version, comment, desc, "
 		"message, arch, maintainer, www, prefix, "
 		"flatsize FROM packages as p, autoremove where id = pkgid ORDER BY weight ASC;";
+    
+    if (pkgdb_lock(db) != EPKG_OK)
+        return NULL;
 
 	sql_exec(db->sqlite, "DROP TABLE IF EXISTS autoremove; "
 			"CREATE TEMPORARY TABLE IF NOT EXISTS autoremove ("
@@ -2930,6 +2939,9 @@ pkgdb_query_delete(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs, int
 		"message, arch, maintainer, www, prefix, "
 		"flatsize, (select count(*) from deps AS d where d.origin=del.origin) as weight FROM packages as p, delete_job as del where id = pkgid "
 		"ORDER BY weight ASC;";
+    
+    if (pkgdb_lock(db) != EPKG_OK)
+        return NULL;
 
 	sbuf_cat(sql, "INSERT OR IGNORE INTO delete_job (origin, pkgid) "
 			"SELECT p.origin, p.id FROM packages as p ");
@@ -3533,6 +3545,9 @@ pkgdb_query_fetch(struct pkgdb *db, match_t match, int nbpkgs, char **pkgs,
 	assert(db != NULL);
 	assert(db->type == PKGDB_REMOTE);
 
+    if (pkgdb_lock(db) != EPKG_OK)
+        return NULL;
+
 	if ((reponame = pkgdb_get_reponame(db, repo)) == NULL)
 		return (NULL);
 
@@ -3675,12 +3690,14 @@ int
 pkgdb_lock(struct pkgdb *db)
 {
     assert(db != NULL);
-	assert(!db->locked);
 
     int sql_ret = SQLITE_OK;
     int ret = EPKG_OK;
     char * errmsg = NULL;
     int64_t lock_attempts_n;
+
+    if (db->locked)
+        return ret;
 
     if (pkg_config_int64(PKG_CONFIG_DB_LOCK_ATTEMPTS, &lock_attempts_n) !=
         EPKG_OK) {
