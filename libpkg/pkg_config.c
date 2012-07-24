@@ -186,6 +186,22 @@ static struct config_entry c[] = {
         "PKG_DB_LOCK_ATTEMPTS",
         "0",
         { NULL }
+    },
+    [PKG_CONFIG_REG_ACTIVE_TIMEOUT] = {
+        INTEGER,
+        "PKG_REGISTER_ACTIVE_TIMEOUT",
+        "5",
+        { NULL }
+    },
+    /* 
+     0 - default value - number of attempts to REGISTER active pkg
+     it means infinity number of attempts
+     */
+    [PKG_CONFIG_REG_ACTIVE_ATTEMPTS] = {
+        INTEGER,
+        "PKG_REGISTER_ACTIVE_ATTEMPTS",
+        "0",
+        { NULL }
     }
 };
 

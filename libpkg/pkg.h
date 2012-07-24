@@ -260,7 +260,9 @@ typedef enum _pkg_config_key {
 	PKG_CONFIG_SRV_MIRROR = 16,
 	PKG_CONFIG_FETCH_RETRY = 17,
     PKG_CONFIG_DB_LOCK_TIMEOUT = 18,
-    PKG_CONFIG_DB_LOCK_ATTEMPTS = 19
+    PKG_CONFIG_DB_LOCK_ATTEMPTS = 19,
+    PKG_CONFIG_REG_ACTIVE_TIMEOUT = 20,
+    PKG_CONFIG_REG_ACTIVE_ATTEMPTS = 21
 } pkg_config_key;
 
 typedef enum {
@@ -319,6 +321,10 @@ typedef enum {
 	 * repo DB schema incompatible version
 	 */
 	EPKG_REPOSCHEMA,
+    /**
+     * Can not process package because someone is working with it.
+     */
+    EPKG_ACTIVE,
 } pkg_error_t;
 
 /**

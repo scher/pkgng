@@ -41,6 +41,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
+#include <sys/types.h>
+#include <signal.h>
 
 #include <sqlite3.h>
 
@@ -587,7 +590,7 @@ pkgdb_init(sqlite3 *sdb)
         "version TEXT NOT NULL,"
         "www TEXT,"
         "start_time TEXT NOT NULL,"
-        "pid INT"
+        "pid INT NOT NULL"
     ");"
 	/* Mark the end of the array */
 
@@ -1790,6 +1793,135 @@ prstmt_finalize(struct pkgdb *db)
 	return;
 }
 
+int
+pkgdb_reg_active_pkg(struct pkgdb *db, struct pkg *pkg)
+{
+    assert(db != NULL);
+    assert(pkg != NULL);
+    
+    int64_t attempts_n, timeout;
+    int ret = EPKG_OK;
+    if (pkg_config_int64(PKG_CONFIG_REG_ACTIVE_ATTEMPTS, &attempts_n) ||
+        pkg_config_int64(PKG_CONFIG_REG_ACTIVE_TIMEOUT, &timeout) != EPKG_OK) {
+        return EPKG_FATAL;
+    }
+    
+    if (attempts_n == 0){
+        --attempts_n;
+    }
+    
+    while (attempts_n-- != 0) {
+        ret = pkgdb_reg_active_pkg2(db, pkg);
+        if (ret == EPKG_OK){
+            break;
+        } else if (ret == EPKG_ACTIVE) {
+            sleep(timeout);
+            continue;
+        } else {
+            ret = EPKG_FATAL;
+            break;
+        }
+    }
+    
+    if ( ret != EPKG_OK ){
+        char *name;
+        pkg_get(pkg, PKG_NAME, &name);
+        pkg_emit_error("unable to register active installation for package: %s",
+                       name);
+    }
+    return ret;
+}
+
+int
+pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
+{
+    printf("Enter pkgdb_reg_active_pkg function\n");
+    assert(db != NULL);
+    assert(pkg != NULL);
+    
+    if ( pkgdb_lock(db) != EPKG_OK )
+        return EPKG_FATAL;
+
+    int pid = getpid();
+    time_t cur_time = time(NULL);
+    sqlite3_stmt *stmt = NULL;
+    const char *origin, *name, *version, *www;
+    pkg_get(pkg, PKG_ORIGIN, &origin, PKG_NAME, &name, PKG_VERSION, &version,
+                        PKG_WWW, &www);
+
+    const char sql_query_pid[] = "SELECT pid from active_installations "
+        "WHERE origin=?1;";
+    
+    const char sql_upd_pid[] = "UPDATE active_installations "
+        "SET pid=?1 "
+        "WHERE origin=?2;";
+    
+    const char sql_ins[] = "INSERT INTO active_installations "
+        "(origin, name, version, www, start_time, pid) "
+        "VALUES (?1, ?2, ?3, ?4, ?5, ?6);";
+
+    sqlite3_prepare_v2(db->sqlite, sql_ins, -1, &stmt, NULL);
+    sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, name, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, version, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, www, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 5, cur_time);
+    sqlite3_bind_int(stmt, 6, pid);
+
+    int ret = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    switch (ret) {
+        case SQLITE_DONE:
+            printf("  pkg registered\n");
+            ret = EPKG_OK;
+            break;
+        case SQLITE_CONSTRAINT:
+            printf("  Constraint\n");
+            sqlite3_prepare_v2(db->sqlite, sql_query_pid, -1, &stmt, NULL);
+            sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
+            assert(sqlite3_step(stmt) == SQLITE_ROW);
+            int query_pid = sqlite3_column_int(stmt, 0);
+            sqlite3_finalize(stmt);
+
+            if ( kill(query_pid, 0) == 0 ) {
+                /*
+                 * some process is working with this pkg.
+                 * unable to start processing.
+                 */
+                if ( query_pid != pid ) {
+                    printf("    Active process is working with pkg(pid==%d)\n",
+                           query_pid);
+                    ret = EPKG_ACTIVE;
+                } else {
+                    printf("    Active process is me\n");
+                    ret = EPKG_OK;
+                }
+            } else {
+                /*
+                 * query_pid is invalid.
+                 * Substitute pid and start working with this pkg
+                 */
+                printf("    Dead pid detected\n");
+                sqlite3_prepare_v2(db->sqlite, sql_upd_pid, -1, &stmt, NULL);
+                sqlite3_bind_int(stmt, 1, pid);
+                sqlite3_bind_text(stmt, 2, origin, -1, SQLITE_STATIC);
+                assert(sqlite3_step(stmt) == SQLITE_DONE);
+                sqlite3_finalize(stmt);
+                ret = EPKG_OK;
+            }
+            break;
+        default:
+            ret = EPKG_FATAL;
+            break;
+    }
+    
+    if ( pkgdb_unlock(db) != EPKG_OK )
+        return EPKG_FATAL;
+    
+    printf("Leave pkgdb_reg_active_pkg function(ret == %d)\n", ret);
+    return ret;
+}
 
 int
 pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete)

@@ -376,6 +376,7 @@ pkg_jobs_fetch(struct pkg_jobs *j)
 	/* Fetch */
 	p = NULL;
 	while (pkg_jobs(j, &p) == EPKG_OK) {
+        pkgdb_reg_active_pkg(j->db, p);
 		if (pkg_repo_fetch(p) != EPKG_OK)
 			return (EPKG_FATAL);
 	}
