@@ -1924,6 +1924,29 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
+pkgdb_unreg_active_pkg(struct pkgdb *db, struct pkg *pkg)
+{
+    assert(db != NULL);
+    assert(pkg != NULL);
+    
+    sqlite3_stmt *stmt;
+    int pid = getpid();
+    const char *origin;
+    pkg_get(pkg, PKG_ORIGIN, &origin);
+
+    const char sql[] = "DELETE FROM active_installations "
+        "WHERE origin=?1 AND pid=?2;";
+    
+    sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL);
+    sqlite3_bind_text(stmt, 1, origin, -1, NULL);
+    sqlite3_bind_int(stmt, 2, pid);
+    
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return 0;
+}
+
+int
 pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete)
 {
 	struct pkg *pkg2 = NULL;
