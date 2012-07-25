@@ -590,7 +590,8 @@ pkgdb_init(sqlite3 *sdb)
         "version TEXT NOT NULL,"
         "www TEXT,"
         "start_time TEXT NOT NULL,"
-        "pid INT NOT NULL"
+        "pid INT NOT NULL,"
+        "wrk_count INT NOT NULL"
     ");"
 	/* Mark the end of the array */
 
@@ -1853,12 +1854,16 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
         "WHERE origin=?1;";
     
     const char sql_upd_pid[] = "UPDATE active_installations "
-        "SET pid=?1 "
+        "SET pid=?1, wrk_count=1 "
         "WHERE origin=?2;";
     
+    const char sql_inc_count[] = "UPDATE active_installations "
+        "SET wrk_count=wrk_count+1 "
+        "WHERE origin=?1;";
+    
     const char sql_ins[] = "INSERT INTO active_installations "
-        "(origin, name, version, www, start_time, pid) "
-        "VALUES (?1, ?2, ?3, ?4, ?5, ?6);";
+        "(origin, name, version, www, start_time, pid, wrk_count) "
+        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1);";
 
     sqlite3_prepare_v2(db->sqlite, sql_ins, -1, &stmt, NULL);
     sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
@@ -1895,6 +1900,12 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
                     ret = EPKG_ACTIVE;
                 } else {
                     printf("    Active process is me\n");
+                    printf("    Inc wrk_count\n");
+                    sqlite3_prepare_v2(db->sqlite, sql_inc_count, -1, &stmt, NULL);
+                    sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
+                    assert(sqlite3_step(stmt) == SQLITE_DONE);
+                    sqlite3_finalize(stmt);
+
                     ret = EPKG_OK;
                 }
             } else {
@@ -1935,10 +1946,20 @@ pkgdb_unreg_active_pkg(struct pkgdb *db, struct pkg *pkg)
     pkg_get(pkg, PKG_ORIGIN, &origin);
 
     const char sql[] = "DELETE FROM active_installations "
-        "WHERE origin=?1 AND pid=?2;";
+        "WHERE origin=?1 AND pid=?2 AND wrk_count=0;";
+    
+    const char sql_desc_count[] = "UPDATE active_installations "
+    "SET wrk_count=wrk_count-1 "
+    "WHERE origin=?1 AND pid=?2;";
+    
+    sqlite3_prepare_v2(db->sqlite, sql_desc_count, -1, &stmt, NULL);
+    sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, pid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
     
     sqlite3_prepare_v2(db->sqlite, sql, -1, &stmt, NULL);
-    sqlite3_bind_text(stmt, 1, origin, -1, NULL);
+    sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 2, pid);
     
     sqlite3_step(stmt);
