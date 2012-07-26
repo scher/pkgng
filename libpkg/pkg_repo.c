@@ -209,7 +209,7 @@ pkg_repo_fetch(struct pkg *pkg)
 	else
 		snprintf(url, sizeof(url), "%s/%s", packagesite, repopath);
 
-	retcode = pkg_fetch_file(url, dest, 0);
+	retcode = pkg_fetch_file(url, dest, 0, 0);
 	fetched = 1;
 
 	if (retcode != EPKG_OK)

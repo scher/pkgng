@@ -39,7 +39,7 @@
 #include "private/utils.h"
 
 int
-pkg_fetch_file(const char *url, const char *dest, time_t t)
+pkg_fetch_file(const char *url, const char *dest, time_t t, int open_flags)
 {
 	int fd = -1;
 	FILE *remote = NULL;
@@ -57,6 +57,11 @@ pkg_fetch_file(const char *url, const char *dest, time_t t)
 	bool srv = false;
 	char zone[MAXHOSTNAMELEN + 12];
 	struct dns_srvinfo *mirrors, *current;
+    int default_oflags = O_WRONLY|O_CREAT|O_TRUNC|O_EXCL;
+    
+    if (!open_flags) {
+        open_flags = default_oflags;
+    }
 
 	current = mirrors = NULL;
 
@@ -67,7 +72,7 @@ pkg_fetch_file(const char *url, const char *dest, time_t t)
 
 	retry = max_retry;
 
-	if ((fd = open(dest, O_WRONLY|O_CREAT|O_TRUNC|O_EXCL, 0600)) == -1) {
+	if ((fd = open(dest, open_flags, 0600)) == -1) {
 		pkg_emit_errno("open", dest);
 		return(EPKG_FATAL);
 	}

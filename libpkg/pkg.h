@@ -886,7 +886,7 @@ int pkg_version_cmp(const char * const , const char * const);
  * Fetch a file.
  * @return An error code.
  */
-int pkg_fetch_file(const char *url, const char *dest, time_t t);
+int pkg_fetch_file(const char *url, const char *dest, time_t t,  int open_flags);
 
 /* glue to deal with ports */
 int ports_parse_plist(struct pkg *, char *, const char *);

@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -73,6 +74,11 @@ pkg_update(const char *name, const char *packagesite, bool force)
 	char repofile[MAXPATHLEN];
 	char repofile_unchecked[MAXPATHLEN];
 	char tmp[21];
+    /*
+     * lock the file to prevent concurrent access.
+     * truncate old file, if it was leaved by another process
+     */
+    int tmp_oflags = O_WRONLY|O_CREAT|O_TRUNC|O_EXLOCK;
 	const char *dbdir = NULL;
 	const char *repokey;
 	unsigned char *sig = NULL;
@@ -113,7 +119,7 @@ pkg_update(const char *name, const char *packagesite, bool force)
 		}
 	}
 
-	if ((rc = pkg_fetch_file(url, tmp, t)) != EPKG_OK) {
+	if ((rc = pkg_fetch_file(url, tmp, t, tmp_oflags)) != EPKG_OK) {
 		/*
 		 * No need to unlink(tmp) here as it is already
 		 * done in pkg_fetch_file() in case fetch failed.
