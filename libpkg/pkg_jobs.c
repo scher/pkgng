@@ -162,6 +162,7 @@ pkg_jobs_install(struct pkg_jobs *j, bool force)
 	int lflags = PKG_LOAD_BASIC | PKG_LOAD_FILES | PKG_LOAD_SCRIPTS |
 	    PKG_LOAD_DIRS;
 	bool handle_rc = false;
+    bool new_savepoint = true;
 
 	STAILQ_INIT(&pkg_queue);
 
@@ -176,8 +177,13 @@ pkg_jobs_install(struct pkg_jobs *j, bool force)
 
 	p = NULL;
 	/* Install */
-	sql_exec(j->db->sqlite, "SAVEPOINT upgrade;");
 	while (pkg_jobs(j, &p) == EPKG_OK) {
+        pkgdb_reg_active_pkg(j->db, p);
+        if (new_savepoint){
+            sql_exec(j->db->sqlite, "SAVEPOINT upgrade;");
+            new_savepoint = false;
+        }
+
 		const char *pkgorigin, *pkgrepopath, *newversion, *origin;
 		bool automatic;
 		flags = 0;
@@ -260,6 +266,8 @@ pkg_jobs_install(struct pkg_jobs *j, bool force)
 
 		if (pkg_add(j->db, path, flags) != EPKG_OK) {
 			sql_exec(j->db->sqlite, "ROLLBACK TO upgrade;");
+            
+            pkgdb_unreg_active_pkg(j->db, p);
 			goto cleanup;
 		}
 
@@ -270,7 +278,9 @@ pkg_jobs_install(struct pkg_jobs *j, bool force)
 
 		if (STAILQ_EMPTY(&pkg_queue)) {
 			sql_exec(j->db->sqlite, "RELEASE upgrade;");
-			sql_exec(j->db->sqlite, "SAVEPOINT upgrade;");
+
+            pkgdb_unreg_active_pkg(j->db, p);
+            new_savepoint = true;
 		}
 	}
 
