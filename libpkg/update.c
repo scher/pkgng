@@ -73,7 +73,7 @@ pkg_update(const char *name, const char *packagesite, bool force)
 	struct archive_entry *ae = NULL;
 	char repofile[MAXPATHLEN];
 	char repofile_unchecked[MAXPATHLEN];
-	char tmp[21];
+	char tmp[] = "/tmp/repo.txz";
     /*
      * lock the file to prevent concurrent access.
      * truncate old file, if it was leaved by another process
@@ -92,13 +92,6 @@ pkg_update(const char *name, const char *packagesite, bool force)
 	int64_t res;
 
 	snprintf(url, MAXPATHLEN, "%s/repo.txz", packagesite);
-
-	(void)strlcpy(tmp, "/tmp/repo.txz.XXXXXX", sizeof(tmp));
-	if (mktemp(tmp) == NULL) {
-		pkg_emit_error("Could not create temporary file %s, "
-		    "aborting update.\n", tmp);
-		return (EPKG_FATAL);
-	}
 
 	if (pkg_config_string(PKG_CONFIG_DBDIR, &dbdir) != EPKG_OK) {
 		pkg_emit_error("Cant get dbdir config entry");
