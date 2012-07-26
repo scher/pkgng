@@ -134,6 +134,7 @@ pkg_add(struct pkgdb *db, const char *path, int flags)
 	const char *ext;
 	int retcode = EPKG_OK;
 	int ret;
+    bool unreg_active = true;
 
 	assert(path != NULL);
 
@@ -147,6 +148,7 @@ pkg_add(struct pkgdb *db, const char *path, int flags)
 		extract = false;
 	else if (ret != EPKG_OK) {
 		retcode = ret;
+        unreg_active = false;
 		goto cleanup;
 	}
 
@@ -157,7 +159,8 @@ pkg_add(struct pkgdb *db, const char *path, int flags)
 
 	if (pkg_is_valid(pkg) != EPKG_OK) {
 		pkg_emit_error("the package is not valid");
-		return (EPKG_FATAL);
+        retcode = EPKG_FATAL;
+		goto cleanup;
 	}
 
 	if (flags & PKG_ADD_AUTOMATIC)
@@ -284,6 +287,10 @@ pkg_add(struct pkgdb *db, const char *path, int flags)
 	cleanup:
 	if (a != NULL)
 		archive_read_finish(a);
+    
+    if (unreg_active) {
+        pkgdb_unreg_active_pkg(db, pkg);
+    }
 
 	pkg_free(pkg);
 

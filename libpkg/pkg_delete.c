@@ -61,15 +61,15 @@ pkg_delete(struct pkg *pkg, struct pkgdb *db, int flags)
 	 * Ensure that we have all the informations we need
 	 */
 	if ((ret = pkgdb_load_rdeps(db, pkg)) != EPKG_OK)
-		return (ret);
+		goto cleanup;
 	if ((ret = pkgdb_load_files(db, pkg)) != EPKG_OK)
-		return (ret);
+		goto cleanup;
 	if ((ret = pkgdb_load_dirs(db, pkg)) != EPKG_OK)
-		return (ret);
+		goto cleanup;
 	if ((ret = pkgdb_load_scripts(db, pkg)) != EPKG_OK)
-		return (ret);
+		goto cleanup;
 	if ((ret = pkgdb_load_mtree(db, pkg)) != EPKG_OK)
-		return (ret);
+		goto cleanup;
 
 	if (flags & PKG_DELETE_UPGRADE)
 		pkg_emit_upgrade_begin(pkg);
@@ -79,8 +79,10 @@ pkg_delete(struct pkg *pkg, struct pkgdb *db, int flags)
 	/* If there are dependencies */
 	if (pkg_rdeps(pkg, &rdep) == EPKG_OK) {
 		pkg_emit_required(pkg, flags & PKG_DELETE_FORCE);
-		if ((flags & PKG_DELETE_FORCE) == 0)
-			return (EPKG_REQUIRED);
+		if (flags ^ PKG_DELETE_FORCE) {
+			ret = EPKG_REQUIRED;
+            goto cleanup;
+        }
 	}
 
 	/*
@@ -94,31 +96,37 @@ pkg_delete(struct pkg *pkg, struct pkgdb *db, int flags)
 	if (flags & PKG_DELETE_UPGRADE) {
 		ret = pkg_script_run(pkg, PKG_SCRIPT_PRE_UPGRADE);
 		if (ret != EPKG_OK)
-			return (ret);
+			goto cleanup;
 	} else {
 		ret = pkg_script_run(pkg, PKG_SCRIPT_PRE_DEINSTALL);
 		if (ret != EPKG_OK)
-			return (ret);
+			goto cleanup;
 	}
 
 	if ((ret = pkg_delete_files(pkg, flags & PKG_DELETE_FORCE)) != EPKG_OK)
-		return (ret);
+		goto cleanup;
 
 	if ((flags & PKG_DELETE_UPGRADE) == 0) {
 		ret = pkg_script_run(pkg, PKG_SCRIPT_POST_DEINSTALL);
 		if (ret != EPKG_OK)
-			return (ret);
+			goto cleanup;
 	}
 
 	ret = pkg_delete_dirs(db, pkg, flags & PKG_DELETE_FORCE);
 	if (ret != EPKG_OK)
-		return (ret);
+		goto cleanup;
 
 	if ((flags & PKG_DELETE_UPGRADE) == 0)
 		pkg_emit_deinstall_finished(pkg);
 
 	pkg_get(pkg, PKG_ORIGIN, &origin);
-	return (pkgdb_unregister_pkg(db, origin));
+    ret = pkgdb_unregister_pkg(db, origin);
+    
+cleanup:
+
+    pkgdb_unreg_active_pkg(db, pkg);
+    
+	return (ret);
 }
 
 int
