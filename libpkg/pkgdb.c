@@ -939,34 +939,35 @@ pkgdb_it_next(struct pkgdb_it *it, struct pkg **pkg_p, int flags)
 
 		return (EPKG_OK);
 	case SQLITE_DONE:
-		return (EPKG_END);
+		ret = EPKG_END;
+        break;
 	default:
 		ERROR_SQLITE(it->db->sqlite);
-		return (EPKG_FATAL);
+		ret = EPKG_FATAL;
+        break;
 	}
+    
+    if (it->db->locked)
+        if (pkgdb_unlock(it->db) != EPKG_OK)
+            ret = EPKG_FATAL;
+    
+    return ret;
 }
 
-int
+void
 pkgdb_it_free(struct pkgdb_it *it)
 {
-    int ret = EPKG_OK;
-    
 	if (it == NULL)
-		return ret;
+		return;
 
 	if (!sqlite3_db_readonly(it->db->sqlite, "main")) {
 		sql_exec(it->db->sqlite, "DROP TABLE IF EXISTS autoremove; "
 			"DROP TABLE IF EXISTS delete_job; "
 			"DROP TABLE IF EXISTS pkgjobs");
 	}
-    
-    if (it->db->locked)
-        if (pkgdb_unlock(it->db) != EPKG_OK)
-            ret = EPKG_FATAL;
 
 	sqlite3_finalize(it->stmt);
 	free(it);
-    return ret;
 }
 
 static const char *
