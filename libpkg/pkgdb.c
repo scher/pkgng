@@ -1840,8 +1840,15 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
     assert(db != NULL);
     assert(pkg != NULL);
     
-    if ( pkgdb_lock(db) != EPKG_OK )
-        return EPKG_FATAL;
+    /*
+     * no need to lock a DB
+     * sqlite3 transaction isolation do this stuff
+     * it is importnant just to use single transation
+     */
+    
+//    if ( pkgdb_lock(db) != EPKG_OK )
+//        return EPKG_FATAL;
+    sql_exec(db->sqlite, "SAVEPOINT register_active;");
 
     int pid = getpid();
     time_t cur_time = time(NULL);
@@ -1927,8 +1934,13 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
             break;
     }
     
-    if ( pkgdb_unlock(db) != EPKG_OK )
-        return EPKG_FATAL;
+//    if ( pkgdb_unlock(db) != EPKG_OK )
+//        return EPKG_FATAL;
+    
+    if (ret != EPKG_OK){
+        sql_exec(db->sqlite, "ROLLBACK TO register_active;");
+    }
+    sql_exec(db->sqlite, "RELEASE register_active;");
     
     printf("Leave pkgdb_reg_active_pkg function(ret == %d)\n", ret);
     return ret;
@@ -1952,6 +1964,8 @@ pkgdb_unreg_active_pkg(struct pkgdb *db, struct pkg *pkg)
     "SET wrk_count=wrk_count-1 "
     "WHERE origin=?1 AND pid=?2;";
     
+    sql_exec(db->sqlite, "SAVEPOINT unregister_active;");
+    
     sqlite3_prepare_v2(db->sqlite, sql_desc_count, -1, &stmt, NULL);
     sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 2, pid);
@@ -1964,6 +1978,9 @@ pkgdb_unreg_active_pkg(struct pkgdb *db, struct pkg *pkg)
     
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+    
+    sql_exec(db->sqlite, "RELEASE unregister_active;");
+    
     return 0;
 }
 
