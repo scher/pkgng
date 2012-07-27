@@ -266,6 +266,7 @@ pkg_jobs_install(struct pkg_jobs *j, bool force)
 
 		if (pkg_add(j->db, path, flags) != EPKG_OK) {
 			sql_exec(j->db->sqlite, "ROLLBACK TO upgrade;");
+            sql_exec(j->db->sqlite, "RELEASE upgrade;");
             
             pkgdb_unreg_active_pkg(j->db, p);
 			goto cleanup;
@@ -287,7 +288,6 @@ pkg_jobs_install(struct pkg_jobs *j, bool force)
 	retcode = EPKG_OK;
 
 	cleanup:
-	sql_exec(j->db->sqlite, "RELEASE upgrade;");
 	pkg_free(newpkg);
 
 	return (retcode);
