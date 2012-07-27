@@ -724,6 +724,8 @@ int pkgdb_register_ports(struct pkgdb *db, struct pkg *pkg);
  */
 int pkgdb_unregister_pkg(struct pkgdb *pkg, const char *origin);
 
+int pkgdb_sanity_active_installations(void);
+
 /**
  * Query the local package database.
  * @param type Describe how pattern should be used.

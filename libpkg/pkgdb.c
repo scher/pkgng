@@ -1986,6 +1986,96 @@ pkgdb_unreg_active_pkg(struct pkgdb *db, struct pkg *pkg)
 }
 
 int
+pkgdb_sanity_active_installations(void)
+{
+    struct pkgdb *pkgdb = calloc(1, sizeof(struct pkgdb));
+    const char *dbdir = NULL;
+    char localpath[MAXPATHLEN + 1];
+    sqlite3_stmt *stmt;
+    int ret = EPKG_OK;
+    int pid;
+    const char *origin;
+    bool delete = false;
+    
+	pkgdb->locked = false;
+    
+    const char sql_query[] = "SELECT origin, pid FROM active_installations;";
+    
+    if (pkg_config_string(PKG_CONFIG_DBDIR, &dbdir)){
+        free(pkgdb);
+        return EPKG_FATAL;
+    }
+    
+    snprintf(localpath, sizeof(localpath), "%s/local.sqlite", dbdir);
+    
+    sqlite3_initialize();
+    if (sqlite3_open(localpath, &pkgdb->sqlite) != SQLITE_OK) {
+        ERROR_SQLITE(pkgdb->sqlite);
+        sqlite3_close(pkgdb->sqlite);
+        free(pkgdb);
+        return (EPKG_FATAL);
+    }
+    
+    if ( pkgdb_lock(pkgdb) != EPKG_OK ){
+        free(pkgdb);
+        return (EPKG_FATAL);
+    };
+    
+    struct sbuf *delete_buf = sbuf_new_auto();
+    sbuf_printf(delete_buf, "DELETE FROM active_installations WHERE ");
+    
+    if (sqlite3_prepare_v2(pkgdb->sqlite, sql_query, -1, &stmt, NULL) !=
+        SQLITE_OK) {
+		ERROR_SQLITE(pkgdb->sqlite);
+		ret =  EPKG_FATAL;
+        goto cleanup;
+	}
+    
+    ret = sqlite3_step(stmt);
+    
+    if (ret == SQLITE_DONE){
+        ret = EPKG_OK;
+        goto cleanup;
+    } else if (ret == SQLITE_ROW) {
+        origin = sqlite3_column_text(stmt, 0);
+        pid = sqlite3_column_int(stmt, 1);
+        if ( kill(pid, 0) != 0) {
+            sbuf_printf(delete_buf, "(origin=\"%s\" AND pid=%d)", origin, pid);
+            delete = true;
+        }
+    } else {
+        ret = EPKG_FATAL;
+        goto cleanup;
+    }
+    
+    while ( (ret = sqlite3_step(stmt)) == SQLITE_ROW) {
+        origin = sqlite3_column_text(stmt, 0);
+        pid = sqlite3_column_int(stmt, 1);
+        if (kill(pid, 0) != 0) {
+            sbuf_printf(delete_buf, " OR (origin=\"%s\" AND pid=%d)", origin, pid);
+            delete = true;
+        }
+    }
+    
+    sbuf_printf(delete_buf, ";");
+    
+    if (delete) {
+        sql_exec(pkgdb->sqlite, sbuf_data(delete_buf));
+    }
+
+cleanup:
+    
+    sqlite3_finalize(stmt);
+    sbuf_delete(delete_buf);
+    
+    pkgdb_unlock(pkgdb);
+    
+    sqlite3_close(pkgdb->sqlite);
+    free(pkgdb);
+    return ret;
+}
+
+int
 pkgdb_register_pkg(struct pkgdb *db, struct pkg *pkg, int complete)
 {
 	struct pkg *pkg2 = NULL;
