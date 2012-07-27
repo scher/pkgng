@@ -53,23 +53,6 @@ static void usage_help(void);
 static int exec_help(int, char **);
 bool quiet = false;
 
-const char * const subcmd_lockers[] = {
-    "add",
-    "audit",
-    "check",
-    "create",
-    "delete",
-    "fetch",
-    "install",
-    "register",
-    "remove",
-    "repo",
-    "set",
-    "update",
-    "upgrade"
-};
-const int subcmd_lockers_len = sizeof(subcmd_lockers)/sizeof(subcmd_lockers[0]);
-
 static struct commands {
 	const char * const name;
 	const char * const desc;
@@ -325,9 +308,6 @@ main(int argc, char **argv)
 		usage();
 		return (ret); /* Not reached but makes scanbuild happy */
 	}
-    
-    if (req_lock(subcmd_lockers , subcmd_lockers_len, command->name))
-        require_lock = true;
 
 	if (ambiguous <= 1) {
 		assert(command->exec != NULL);

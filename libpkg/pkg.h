@@ -53,7 +53,6 @@ struct pkg_user;
 struct pkg_group;
 struct pkg_shlib;
 
-extern bool require_lock;
 struct pkgdb;
 struct pkgdb_it;
 
