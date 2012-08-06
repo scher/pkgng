@@ -1837,7 +1837,6 @@ pkgdb_reg_active_pkg(struct pkgdb *db, struct pkg *pkg)
 int
 pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
 {
-    printf("Enter pkgdb_reg_active_pkg function\n");
     assert(db != NULL);
     assert(pkg != NULL);
     
@@ -1886,11 +1885,10 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
     
     switch (ret) {
         case SQLITE_DONE:
-            printf("  pkg registered\n");
             ret = EPKG_OK;
             break;
         case SQLITE_CONSTRAINT:
-            printf("  Constraint\n");
+            // check sanity of the pid
             sqlite3_prepare_v2(db->sqlite, sql_query_pid, -1, &stmt, NULL);
             sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
             assert(sqlite3_step(stmt) == SQLITE_ROW);
@@ -1903,12 +1901,8 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
                  * unable to start processing.
                  */
                 if ( query_pid != pid ) {
-                    printf("    Active process is working with pkg(pid==%d)\n",
-                           query_pid);
                     ret = EPKG_INUSE;
                 } else {
-                    printf("    Active process is me\n");
-                    printf("    Inc wrk_count\n");
                     sqlite3_prepare_v2(db->sqlite, sql_inc_count, -1, &stmt, NULL);
                     sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
                     assert(sqlite3_step(stmt) == SQLITE_DONE);
@@ -1921,12 +1915,12 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
                  * query_pid is invalid.
                  * Substitute pid and start working with this pkg
                  */
-                printf("    Dead pid detected\n");
                 sqlite3_prepare_v2(db->sqlite, sql_upd_pid, -1, &stmt, NULL);
                 sqlite3_bind_int(stmt, 1, pid);
                 sqlite3_bind_text(stmt, 2, origin, -1, SQLITE_STATIC);
                 assert(sqlite3_step(stmt) == SQLITE_DONE);
                 sqlite3_finalize(stmt);
+
                 ret = EPKG_OK;
             }
             break;
@@ -1942,8 +1936,7 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
         sql_exec(db->sqlite, "ROLLBACK TO register_active;");
     }
     sql_exec(db->sqlite, "RELEASE register_active;");
-    
-    printf("Leave pkgdb_reg_active_pkg function(ret == %d)\n", ret);
+
     return ret;
 }
 
