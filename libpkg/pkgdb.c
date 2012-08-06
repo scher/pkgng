@@ -858,7 +858,9 @@ pkgdb_close(struct pkgdb *db)
 		prstmt_finalize(db);
 
 	if (db->sqlite != NULL) {
-		assert(!db->locked);
+		if ( db->locked ) {
+            pkgdb_unlock(db);
+        };
 		if (db->type == PKGDB_REMOTE) {
 			pkgdb_detach_remotes(db->sqlite);
 		}
