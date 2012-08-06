@@ -323,7 +323,7 @@ typedef enum {
     /**
      * Can not process package because someone is working with it.
      */
-    EPKG_ACTIVE,
+    EPKG_INUSE,
 } pkg_error_t;
 
 /**

@@ -1814,7 +1814,7 @@ pkgdb_reg_active_pkg(struct pkgdb *db, struct pkg *pkg)
         ret = pkgdb_reg_active_pkg2(db, pkg);
         if (ret == EPKG_OK){
             break;
-        } else if (ret == EPKG_ACTIVE) {
+        } else if (ret == EPKG_INUSE) {
             sleep(timeout);
             continue;
         } else {
@@ -1903,7 +1903,7 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
                 if ( query_pid != pid ) {
                     printf("    Active process is working with pkg(pid==%d)\n",
                            query_pid);
-                    ret = EPKG_ACTIVE;
+                    ret = EPKG_INUSE;
                 } else {
                     printf("    Active process is me\n");
                     printf("    Inc wrk_count\n");
