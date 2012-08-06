@@ -1945,7 +1945,7 @@ pkgdb_reg_active_pkg2(struct pkgdb *db, struct pkg *pkg)
     return ret;
 }
 
-int
+void
 pkgdb_unreg_active_pkg(struct pkgdb *db, struct pkg *pkg)
 {
     assert(db != NULL);
@@ -1979,8 +1979,6 @@ pkgdb_unreg_active_pkg(struct pkgdb *db, struct pkg *pkg)
     sqlite3_finalize(stmt);
     
     sql_exec(db->sqlite, "RELEASE unregister_active;");
-    
-    return 0;
 }
 
 int
