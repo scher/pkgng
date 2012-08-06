@@ -149,6 +149,7 @@ pkg_jobs_keep_files_to_del(struct pkg *p1, struct pkg *p2)
 static int
 pkg_jobs_install(struct pkg_jobs *j, bool force)
 {
+    int ret;
 	struct pkg *p = NULL;
 	struct pkg *pkg = NULL;
 	struct pkg *newpkg = NULL;
@@ -178,7 +179,9 @@ pkg_jobs_install(struct pkg_jobs *j, bool force)
 	p = NULL;
 	/* Install */
 	while (pkg_jobs(j, &p) == EPKG_OK) {
-        pkgdb_reg_active_pkg(j->db, p);
+        if ( (ret = pkgdb_reg_active_pkg(j->db, p)) != EPKG_OK ) {
+            return ret;
+        };
         if (new_savepoint){
             sql_exec(j->db->sqlite, "SAVEPOINT upgrade;");
             new_savepoint = false;
@@ -300,7 +303,9 @@ pkg_jobs_deinstall(struct pkg_jobs *j, int force)
 	int retcode;
 
 	while (pkg_jobs(j, &p) == EPKG_OK) {
-        pkgdb_reg_active_pkg(j->db, p);
+        if ( (retcode = pkgdb_reg_active_pkg(j->db, p)) != EPKG_OK ) {
+            return retcode;
+        };
 		
         if (force)
 			retcode = pkg_delete(p, j->db, PKG_DELETE_FORCE);
@@ -391,7 +396,10 @@ pkg_jobs_fetch(struct pkg_jobs *j)
 	/* Fetch */
 	p = NULL;
 	while (pkg_jobs(j, &p) == EPKG_OK) {
-        pkgdb_reg_active_pkg(j->db, p);
+        
+        if ( (ret = pkgdb_reg_active_pkg(j->db, p)) != EPKG_OK) {
+            return ret;
+        };
 		if (pkg_repo_fetch(p) != EPKG_OK)
 			return (EPKG_FATAL);
         pkgdb_unreg_active_pkg(j->db, p);

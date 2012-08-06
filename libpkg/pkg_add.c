@@ -152,7 +152,11 @@ pkg_add(struct pkgdb *db, const char *path, int flags)
 		goto cleanup;
 	}
 
-    pkgdb_reg_active_pkg(db, pkg);
+    if ( (ret = pkgdb_reg_active_pkg(db, pkg)) != EPKG_OK ) {
+        retcode = ret;
+        unreg_active = false;
+        goto cleanup;
+    };
 
 	if ((flags & PKG_ADD_UPGRADE) == 0)
 		pkg_emit_install_begin(pkg);

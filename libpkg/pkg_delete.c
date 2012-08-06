@@ -49,7 +49,9 @@ pkg_delete(struct pkg *pkg, struct pkgdb *db, int flags)
 	assert(pkg != NULL);
 	assert(db != NULL);
 
-    pkgdb_reg_active_pkg(db, pkg);
+    if ( (ret = pkgdb_reg_active_pkg(db, pkg)) != EPKG_OK ) {
+        return ret;
+    };
     
 	/*
 	 * Do not trust the existing entries as it may have changed if we
