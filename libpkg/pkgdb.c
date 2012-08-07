@@ -2048,9 +2048,8 @@ pkgdb_sanity_active_installations(void)
         }
     }
     
-    sbuf_printf(delete_buf, ";");
-    
     if (delete) {
+        sbuf_printf(delete_buf, ";");
         sql_exec(pkgdb->sqlite, sbuf_data(delete_buf));
     }
 
