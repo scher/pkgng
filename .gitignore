@@ -14,9 +14,3 @@ pkg2legacy
 pkg-static/pkg-static
 tests/test
 docs/html/*
-
-._.DS_Store
-._pkgng.xcodeproj
-pkgng.xcodeproj
-._*
-tests/par-tests
